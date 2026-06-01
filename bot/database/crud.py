@@ -1,17 +1,35 @@
 from __future__ import annotations
 
-from sqlalchemy import func, select, update
+import json
+from datetime import datetime
+
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.config import settings
-from bot.database.models import AppSetting, District, Region, Role, User, utcnow
+from bot.database.models import (
+    AppSetting,
+    DailyStat,
+    District,
+    Region,
+    Role,
+    User,
+    Vacancy,
+    utcnow,
+)
 
 
 # ---------------------------------------------------------------- users
-def _role_for(tg_id: int) -> Role:
+def _role_for(tg_id: int, existing: Role | None) -> Role:
+    """Rolni aniqlaydi.
+
+    - Superadmin faqat .env orqali (dasturchi tomonidan) qo'yiladi.
+    - Admin: .env ADMIN_IDS yoki DB'da allaqachon ADMIN bo'lsa (superadmin
+      tomonidan tayinlangan) — saqlanadi.
+    """
     if settings.is_superadmin(tg_id):
         return Role.SUPERADMIN
-    if settings.is_admin(tg_id):
+    if tg_id in settings.admin_ids or existing == Role.ADMIN:
         return Role.ADMIN
     return Role.USER
 
@@ -23,17 +41,24 @@ async def get_or_create_user(
     full_name: str | None,
 ) -> User | type[User]:
     user = await session.get(User, tg_id)
-    role = _role_for(tg_id)
     if user is None:
-        user = User(id=tg_id, username=username, full_name=full_name, role=role)
+        user = User(
+            id=tg_id,
+            username=username,
+            full_name=full_name,
+            role=_role_for(tg_id, None),
+            is_active=True,
+        )
         session.add(user)
         await session.commit()
         return user
 
-    # keep profile + role fresh
+    # profil + rol + kunlik faollikni yangilab turamiz
     user.username = username
     user.full_name = full_name
     user.last_active = utcnow()
+    user.is_active = True
+    role = _role_for(tg_id, user.role)
     if user.role != role:
         user.role = role
     await session.commit()
@@ -41,8 +66,129 @@ async def get_or_create_user(
 
 
 async def count_users(session: AsyncSession) -> int:
-    res = await session.execute(select(User.id))
-    return len(res.scalars().all())
+    res = await session.execute(select(func.count(User.id)))
+    return int(res.scalar() or 0)
+
+
+# ---------------------------------------------------------------- user stats
+async def count_active_today(session: AsyncSession) -> int:
+    res = await session.execute(
+        select(func.count(User.id)).where(User.is_active.is_(True))
+    )
+    return int(res.scalar() or 0)
+
+
+async def count_new_since(session: AsyncSession, since: datetime) -> int:
+    res = await session.execute(
+        select(func.count(User.id)).where(User.created_at >= since)
+    )
+    return int(res.scalar() or 0)
+
+
+async def count_banned(session: AsyncSession) -> int:
+    res = await session.execute(
+        select(func.count(User.id)).where(User.is_banned.is_(True))
+    )
+    return int(res.scalar() or 0)
+
+
+async def count_admins(session: AsyncSession) -> int:
+    res = await session.execute(
+        select(func.count(User.id)).where(
+            User.role.in_([Role.ADMIN, Role.SUPERADMIN])
+        )
+    )
+    return int(res.scalar() or 0)
+
+
+async def all_user_ids(session: AsyncSession) -> list[int]:
+    """Reklama yuborish uchun barcha (bloklanmagan) foydalanuvchi ID lari."""
+    res = await session.execute(select(User.id).where(User.is_banned.is_(False)))
+    return [int(x) for x in res.scalars().all()]
+
+
+async def delete_user(session: AsyncSession, tg_id: int) -> None:
+    await session.execute(delete(User).where(User.id == tg_id))
+    await session.commit()
+
+
+async def delete_users(session: AsyncSession, tg_ids: list[int]) -> int:
+    if not tg_ids:
+        return 0
+    await session.execute(delete(User).where(User.id.in_(tg_ids)))
+    await session.commit()
+    return len(tg_ids)
+
+
+# ---------------------------------------------------------------- admin mgmt
+async def find_user(
+    session: AsyncSession, query: str
+) -> User | None:
+    """ID yoki @username bo'yicha foydalanuvchini topadi."""
+    q = query.strip().lstrip("@")
+    if q.isdigit():
+        return await session.get(User, int(q))
+    res = await session.execute(
+        select(User).where(func.lower(User.username) == q.lower())
+    )
+    return res.scalars().first()
+
+
+async def set_admin(session: AsyncSession, tg_id: int, make_admin: bool) -> User | None:
+    """Foydalanuvchini admin qiladi yoki adminlikdan oladi (superadmin uchun)."""
+    user = await session.get(User, tg_id)
+    if user is None:
+        return None
+    if user.role == Role.SUPERADMIN:
+        return user  # superadmin rolini o'zgartirmaymiz
+    user.role = Role.ADMIN if make_admin else Role.USER
+    await session.commit()
+    return user
+
+
+async def list_admins(session: AsyncSession) -> list[User]:
+    res = await session.execute(
+        select(User)
+        .where(User.role.in_([Role.ADMIN, Role.SUPERADMIN]))
+        .order_by(User.role, User.id)
+    )
+    return list(res.scalars().all())
+
+
+# ---------------------------------------------------------------- daily reset
+async def record_daily_and_reset(
+    session: AsyncSession, day: str, since: datetime
+) -> dict:
+    """Kun yakunida statistikani yozadi va is_active bayroqlarini tozalaydi.
+
+    `day` — yoziladigan sana (YYYY-MM-DD). `since` — shu kun boshining UTC vaqti
+    (yangi foydalanuvchilarni sanash uchun). Yozilgan qiymatlarni qaytaradi.
+    """
+    active = await count_active_today(session)
+    total = await count_users(session)
+    new = await count_new_since(session, since)
+
+    row = await session.get(DailyStat, day)
+    if row is None:
+        row = DailyStat(
+            day=day, active_users=active, new_users=new, total_users=total
+        )
+        session.add(row)
+    else:
+        row.active_users = active
+        row.new_users = new
+        row.total_users = total
+
+    await session.execute(update(User).values(is_active=False))
+    await session.commit()
+    return {"day": day, "active": active, "new": new, "total": total}
+
+
+async def recent_daily_stats(session: AsyncSession, limit: int = 7) -> list[DailyStat]:
+    res = await session.execute(
+        select(DailyStat).order_by(DailyStat.day.desc()).limit(limit)
+    )
+    return list(res.scalars().all())
 
 
 # ---------------------------------------------------------------- settings
@@ -207,3 +353,130 @@ async def set_only_district(
         .values(is_active=True)
     )
     await session.commit()
+
+
+# ---------------------------------------------------------------- vacancies
+async def count_all_vacancies(session: AsyncSession) -> int:
+    res = await session.execute(select(func.count(Vacancy.id)))
+    return int(res.scalar() or 0)
+
+
+async def last_sync_at(session: AsyncSession) -> datetime | None:
+    res = await session.execute(select(func.max(Vacancy.synced_at)))
+    return res.scalar()
+
+
+def _is_region(soato: int) -> bool:
+    """4 xonali kod -> viloyat, 7 xonali -> tuman."""
+    return soato < 10_000
+
+
+def _scope(soato: int, region_soato: int):
+    """So'rov sharti: viloyat darajasida region_soato, aks holda soato bo'yicha."""
+    if _is_region(soato):
+        return Vacancy.region_soato == region_soato
+    return Vacancy.soato == soato
+
+
+async def replace_region_vacancies(
+    session: AsyncSession, region_soato: int, vacancies: list[dict]
+) -> int:
+    """Viloyatning eski vakansiyalarini o'chirib, yangilarini yozadi (atomik)."""
+    await session.execute(
+        delete(Vacancy).where(Vacancy.region_soato == region_soato)
+    )
+    objs: list[Vacancy] = []
+    for v in vacancies:
+        try:
+            vid = int(v["id"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        try:
+            soato = int(v.get("vacancy_soato_code") or v.get("company_soato_code") or region_soato)
+        except (TypeError, ValueError):
+            soato = region_soato
+        objs.append(
+            Vacancy(
+                id=vid,
+                region_soato=region_soato,
+                soato=soato,
+                company_tin=str(v.get("company_tin") or ""),
+                company_name=(v.get("company_name") or "")[:256],
+                position_name=(v.get("position_name") or "")[:256],
+                order_key=str(v.get("created_at") or ""),
+                raw=json.dumps(v, ensure_ascii=False),
+            )
+        )
+    session.add_all(objs)
+    await session.commit()
+    return len(objs)
+
+
+async def district_counts(
+    session: AsyncSession, region_soato: int
+) -> dict[int, int]:
+    """Viloyatdagi har tuman (soato) bo'yicha vakansiyalar soni."""
+    res = await session.execute(
+        select(Vacancy.soato, func.count(Vacancy.id))
+        .where(Vacancy.region_soato == region_soato)
+        .group_by(Vacancy.soato)
+    )
+    return {int(s): int(c) for s, c in res.all()}
+
+
+async def count_vacancies(
+    session: AsyncSession, region_soato: int, soato: int
+) -> int:
+    res = await session.execute(
+        select(func.count(Vacancy.id)).where(_scope(soato, region_soato))
+    )
+    return int(res.scalar() or 0)
+
+
+async def list_companies(
+    session: AsyncSession, region_soato: int, soato: int
+) -> list[dict]:
+    """Hudud bo'yicha korxonalar (company_tin bo'yicha guruhlangan)."""
+    res = await session.execute(
+        select(
+            Vacancy.company_tin,
+            func.max(Vacancy.company_name),
+            func.count(Vacancy.id),
+        )
+        .where(_scope(soato, region_soato))
+        .group_by(Vacancy.company_tin)
+        .order_by(func.max(Vacancy.company_name))
+    )
+    return [
+        {"tin": tin, "name": name or "Tashkilot", "count": int(cnt)}
+        for tin, name, cnt in res.all()
+    ]
+
+
+async def list_company_vacancies(
+    session: AsyncSession, region_soato: int, soato: int, company_tin: str
+) -> list[dict]:
+    """Bitta korxonaning hududdagi vakansiyalari (yangi -> eski)."""
+    res = await session.execute(
+        select(Vacancy.raw)
+        .where(_scope(soato, region_soato), Vacancy.company_tin == company_tin)
+        .order_by(Vacancy.order_key.desc(), Vacancy.id.desc())
+    )
+    out: list[dict] = []
+    for (raw,) in res.all():
+        try:
+            out.append(json.loads(raw))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+async def last_synced(
+    session: AsyncSession, region_soato: int
+) -> datetime | None:
+    res = await session.execute(
+        select(func.max(Vacancy.synced_at)).where(
+            Vacancy.region_soato == region_soato
+        )
+    )
+    return res.scalar()

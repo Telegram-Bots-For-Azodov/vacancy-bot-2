@@ -1,16 +1,18 @@
-"""abkm.mehnat.uz API klienti.
+"""abkm.mehnat.uz `service_vacancies` API klienti.
 
-Ikkita endpoint:
-- vacancy-reports : SOATO (yoki report_id) bo'yicha vakansiya (lavozim) ro'yxati
-- v-reports       : SOATO bo'yicha tashkilotlar (har biri count_vacancy bilan)
+Bitta endpoint: `service_vacancies` — `filter` (JSON massiv) + `page/start/limit`
+bilan ishlaydi. SOATO ham viloyat (4 xonali), ham tuman (7 xonali) darajasini
+qabul qiladi. Faqat e'lon qilingan (`is_published=true`) vakansiyalar olinadi.
 
-API `soato` ni viloyat va tuman darajasida qabul qiladi (serverda filtrlaydi).
+Navigatsiya API sahifalashiga tayanadi: global indeks -> sahifa raqami ->
+sahifadagi element. Har sahifa alohida keshlanadi.
 """
 from __future__ import annotations
 
 import asyncio
+import json
+import math
 import time
-from datetime import datetime
 
 import aiohttp
 from loguru import logger
@@ -19,13 +21,12 @@ from bot.config import settings
 from bot.services.token_service import get_token
 
 _CACHE_TTL = 600  # 10 daqiqa
-_MAX_PAGES = 100
-_PER_PAGE = 50
+_SYNC_PER_PAGE = 500  # sinxronlashda bitta sahifada nechta olish
+_MAX_PAGES = 1000  # himoya chegarasi
+_SYNC_CONCURRENCY = 8  # sinxronlashda bir vaqtda nechta sahifa so'rovi
 
-# kesh
-_cache: dict[tuple, tuple[float, list[dict]]] = {}
-_org_cache: dict[tuple[int, int, int], tuple[float, list[dict]]] = {}
-_count_cache: dict[tuple[int, int, int], tuple[float, int]] = {}
+# kesh: (soato, published) -> (ts, total)
+_count_cache: dict[tuple, tuple[float, int]] = {}
 
 # 401 yuz berganini eslab qolish (xatoni yutadigan joylar uchun)
 _auth_error: bool = False
@@ -52,13 +53,6 @@ def consume_auth_error() -> bool:
     return v
 
 
-def _now_ym() -> tuple[int, int]:
-    now = datetime.now()
-    year = settings.DEFAULT_YEAR or now.year
-    month = settings.DEFAULT_MONTH or now.month
-    return year, month
-
-
 def _headers() -> dict:
     return {
         "Accept": "application/json, text/plain, */*",
@@ -71,13 +65,47 @@ def _headers() -> dict:
     }
 
 
-async def _get_data(
-    session: aiohttp.ClientSession, url: str, params: dict
-) -> dict:
-    params = {**params, "_dc": int(time.time() * 1000)}
+def _build_filter(
+    soato: int,
+    *,
+    published_only: bool = True,
+    company_inn: str | None = None,
+    position_name: str | None = None,
+) -> str:
+    """`filter` parametri uchun JSON satr."""
+    f: list[dict] = [
+        {"property": "DIRECTION", "operator": "=", "value": "0"},
+        {"property": "ReqSalaryMinimum", "operator": "=", "value": ""},
+        {"property": "WORK_RATE", "operator": "=", "value": "0"},
+        {"property": "SOATO", "operator": "=", "value": soato},
+    ]
+    if published_only:
+        f.append({"property": "is_published", "operator": "=", "value": 1})
+    if company_inn:
+        f.append({"property": "COMPANY_INN", "operator": "=", "value": company_inn})
+    if position_name:
+        f.append({"property": "position_name", "operator": "=", "value": position_name})
+    return json.dumps(f, ensure_ascii=False)
+
+
+async def _get_page(
+    session: aiohttp.ClientSession,
+    soato: int,
+    page: int,
+    limit: int,
+    published_only: bool,
+) -> tuple[list[dict], int]:
+    """Bitta sahifa: (items, total)."""
+    params = {
+        "page": page,
+        "start": (page - 1) * limit,
+        "limit": limit,
+        "filter": _build_filter(soato, published_only=published_only),
+        "_dc": int(time.time() * 1000),
+    }
     cookies = {"abkm_token": get_token()}
     async with session.get(
-        url,
+        settings.ABKM_BASE_URL,
         params=params,
         headers=_headers(),
         cookies=cookies,
@@ -91,159 +119,68 @@ async def _get_data(
         payload = await resp.json()
     if not payload.get("success"):
         raise ABKMError("API muvaffaqiyatsiz javob qaytardi.")
-    return payload.get("data", {})
+    data = payload.get("data", {}) or {}
+    return data.get("data", []) or [], int(data.get("total", 0) or 0)
 
 
-# ---------------------------------------------------------------- vacancies
-async def _fetch_all_pages(
-    url: str, base_params: dict, log_label: str
+# ---------------------------------------------------------------- fetch all
+async def fetch_all(
+    soato: int,
+    published_only: bool = True,
+    per_page: int = _SYNC_PER_PAGE,
 ) -> list[dict]:
-    items: list[dict] = []
+    """SOATO (odatda viloyat) bo'yicha BARCHA vakansiyalarni yig'adi.
+
+    Avval 1-sahifani olib, umumiy sonni aniqlaydi; qolgan sahifalarni
+    parallel (cheklangan konkurensiya bilan) o'qiydi.
+    """
     async with aiohttp.ClientSession() as session:
-        first = await _get_data(session, url, {**base_params, "page": 1, "start": 0})
-        items.extend(first.get("data", []))
-        last_page = int(first.get("last_page", 1) or 1)
-        for page in range(2, min(last_page, _MAX_PAGES) + 1):
-            data = await _get_data(
-                session,
-                url,
-                {**base_params, "page": page, "start": (page - 1) * _PER_PAGE},
-            )
-            items.extend(data.get("data", []))
-    logger.info(f"abkm: {log_label} -> {len(items)} ta")
+        first, total = await _get_page(session, soato, 1, per_page, published_only)
+        _count_cache[(soato, published_only)] = (time.time(), total)
+        last_page = math.ceil(total / per_page) if total else 1
+        last_page = min(last_page, _MAX_PAGES)
+
+        pages: dict[int, list[dict]] = {1: first}
+        if last_page > 1:
+            sem = asyncio.Semaphore(_SYNC_CONCURRENCY)
+
+            async def one(page: int) -> None:
+                async with sem:
+                    chunk, _ = await _get_page(
+                        session, soato, page, per_page, published_only
+                    )
+                pages[page] = chunk
+
+            await asyncio.gather(*(one(p) for p in range(2, last_page + 1)))
+
+    items: list[dict] = []
+    for page in range(1, last_page + 1):
+        items.extend(pages.get(page, []))
+    logger.info(f"abkm: fetch_all soato={soato} -> {len(items)}/{total} ta")
     return items
-
-
-async def fetch_vacancies(
-    soato: int,
-    year: int | None = None,
-    month: int | None = None,
-    force: bool = False,
-) -> list[dict]:
-    """SOATO bo'yicha barcha vakansiyalar (lavozimlar)."""
-    if year is None or month is None:
-        year, month = _now_ym()
-    key = ("vac", soato, year, month)
-    cached = _cache.get(key)
-    if cached and not force and (time.time() - cached[0] < _CACHE_TTL):
-        return cached[1]
-
-    base = {"limit": _PER_PAGE, "year": year, "month": month, "tin": "", "soato": soato}
-    items = await _fetch_all_pages(
-        settings.ABKM_BASE_URL, base, f"vac soato={soato} {year}-{month:02d}"
-    )
-    _cache[key] = (time.time(), items)
-    return items
-
-
-async def fetch_district_vacancies(
-    region_soato: int,
-    district_soato: int | None,
-    year: int | None = None,
-    month: int | None = None,
-    force: bool = False,
-) -> list[dict]:
-    target = district_soato if district_soato is not None else region_soato
-    return await fetch_vacancies(target, year, month, force)
-
-
-async def fetch_report_vacancies(
-    soato: int,
-    report_id: int,
-    year: int | None = None,
-    month: int | None = None,
-    force: bool = False,
-) -> list[dict]:
-    """Bitta tashkilot (report_id) vakansiyalari."""
-    if year is None or month is None:
-        year, month = _now_ym()
-    key = ("rep", soato, report_id, year, month)
-    cached = _cache.get(key)
-    if cached and not force and (time.time() - cached[0] < _CACHE_TTL):
-        return cached[1]
-
-    base = {
-        "limit": _PER_PAGE,
-        "year": year,
-        "month": month,
-        "tin": "",
-        "soato": soato,
-        "report_id": report_id,
-    }
-    items = await _fetch_all_pages(
-        settings.ABKM_BASE_URL, base, f"rep report_id={report_id}"
-    )
-    _cache[key] = (time.time(), items)
-    return items
-
-
-# ---------------------------------------------------------------- organizations
-async def fetch_organizations(
-    soato: int,
-    year: int | None = None,
-    month: int | None = None,
-    force: bool = False,
-) -> list[dict]:
-    """SOATO bo'yicha vakansiyasi bor tashkilotlar (report_id bo'yicha takrorlanmas)."""
-    if year is None or month is None:
-        year, month = _now_ym()
-    key = (soato, year, month)
-    cached = _org_cache.get(key)
-    if cached and not force and (time.time() - cached[0] < _CACHE_TTL):
-        return cached[1]
-
-    base = {
-        "limit": _PER_PAGE,
-        "year": year,
-        "month": month,
-        "company_tin": "",
-        "soato": soato,
-    }
-    raw = await _fetch_all_pages(
-        settings.ABKM_VREPORTS_URL, base, f"orgs soato={soato} {year}-{month:02d}"
-    )
-
-    seen: set = set()
-    orgs: list[dict] = []
-    for it in raw:
-        if not it.get("has_vacancy") or int(it.get("count_vacancy", 0) or 0) <= 0:
-            continue
-        rid = it.get("report_id")
-        if rid in seen:
-            continue
-        seen.add(rid)
-        orgs.append(it)
-
-    _org_cache[key] = (time.time(), orgs)
-    return orgs
 
 
 # ---------------------------------------------------------------- counts
-async def _fetch_total(
-    session: aiohttp.ClientSession, soato: int, year: int, month: int
-) -> int:
-    data = await _get_data(
-        session,
-        settings.ABKM_BASE_URL,
-        {"page": 1, "start": 0, "limit": 1, "year": year, "month": month,
-         "tin": "", "soato": soato},
-    )
-    return int(data.get("total", 0) or 0)
+async def fetch_total(soato: int, published_only: bool = True) -> int:
+    """SOATO bo'yicha vakansiyalar soni (limit=1 bilan tez)."""
+    cached = _count_cache.get((soato, published_only))
+    if cached and (time.time() - cached[0] < _CACHE_TTL):
+        return cached[1]
+    async with aiohttp.ClientSession() as session:
+        _, total = await _get_page(session, soato, 1, 1, published_only)
+    _count_cache[(soato, published_only)] = (time.time(), total)
+    return total
 
 
 async def fetch_totals(
     soatos: list[int],
-    year: int | None = None,
-    month: int | None = None,
+    published_only: bool = True,
 ) -> dict[int, int]:
     """Bir nechta SOATO bo'yicha vakansiyalar sonini parallel oladi. Xato -> -1."""
-    if year is None or month is None:
-        year, month = _now_ym()
-
     result: dict[int, int] = {}
     to_fetch: list[int] = []
     for s in soatos:
-        cached = _count_cache.get((s, year, month))
+        cached = _count_cache.get((s, published_only))
         if cached and (time.time() - cached[0] < _CACHE_TTL):
             result[s] = cached[1]
         else:
@@ -254,10 +191,10 @@ async def fetch_totals(
 
             async def one(s: int) -> None:
                 try:
-                    total = await _fetch_total(session, s, year, month)
+                    _, total = await _get_page(session, s, 1, 1, published_only)
                 except Exception:  # noqa: BLE001
                     total = -1
-                _count_cache[(s, year, month)] = (time.time(), total)
+                _count_cache[(s, published_only)] = (time.time(), total)
                 result[s] = total
 
             await asyncio.gather(*(one(s) for s in to_fetch))

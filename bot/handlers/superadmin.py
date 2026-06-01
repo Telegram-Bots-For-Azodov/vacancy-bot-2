@@ -2,14 +2,28 @@ from __future__ import annotations
 
 from aiogram import F, Router
 from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.config import settings
 from bot.database import crud
-from bot.keyboards.superadmin_kb import sa_districts_kb, sa_panel, sa_regions_kb
+from bot.keyboards.superadmin_kb import (
+    sa_admins_kb,
+    sa_districts_kb,
+    sa_panel,
+    sa_regions_kb,
+)
+from bot.states import AdminMgmtStates
 
 router = Router(name="superadmin")
+
+ADMINS_TEXT = (
+    "👮 <b>Adminlar</b>\n\n"
+    "👑 — superadmin (o'zgartirib bo'lmaydi)\n"
+    "🛠 — admin\n\n"
+    "Admin qo'shish uchun «➕ Admin qo'shish» tugmasini bosing."
+)
 
 PANEL_TEXT = (
     "👑 <b>Superadmin panel</b>\n\n"
@@ -46,6 +60,71 @@ async def cb_panel(call: CallbackQuery) -> None:
         return
     await call.message.edit_text(PANEL_TEXT, reply_markup=sa_panel())
     await call.answer()
+
+
+@router.callback_query(F.data == "sa:noop")
+async def cb_noop(call: CallbackQuery) -> None:
+    await call.answer()
+
+
+# ------------------------------------------------------------- admins mgmt
+@router.callback_query(F.data == "sa:admins")
+async def cb_admins(call: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+    if not _guard(call.from_user.id):
+        await call.answer("Ruxsat yo'q.", show_alert=True)
+        return
+    await state.clear()
+    admins = await crud.list_admins(session)
+    await call.message.edit_text(ADMINS_TEXT, reply_markup=sa_admins_kb(admins))
+    await call.answer()
+
+
+@router.callback_query(F.data == "sa:adm_add")
+async def cb_admin_add(call: CallbackQuery, state: FSMContext) -> None:
+    if not _guard(call.from_user.id):
+        await call.answer("Ruxsat yo'q.", show_alert=True)
+        return
+    await state.set_state(AdminMgmtStates.waiting_add)
+    await call.message.edit_text(
+        "➕ <b>Admin qo'shish</b>\n\n"
+        "Foydalanuvchining <b>ID</b> raqami yoki <b>@username</b> ni yuboring.\n\n"
+        "<i>Eslatma: u avval botda /start bosgan bo'lishi kerak.</i>"
+    )
+    await call.answer()
+
+
+@router.message(AdminMgmtStates.waiting_add, F.text)
+async def on_admin_add(message: Message, state: FSMContext, session: AsyncSession) -> None:
+    if not _guard(message.from_user.id):
+        await state.clear()
+        return
+    target = await crud.find_user(session, message.text)
+    if target is None:
+        await message.answer(
+            "😕 Bunday foydalanuvchi topilmadi. U avval botda /start bosganmi?\n"
+            "ID yoki @username ni qaytadan yuboring."
+        )
+        return
+    await crud.set_admin(session, target.id, make_admin=True)
+    await state.clear()
+    admins = await crud.list_admins(session)
+    name = target.full_name or target.username or target.id
+    await message.answer(
+        f"✅ <b>{name}</b> admin qilib belgilandi.",
+        reply_markup=sa_admins_kb(admins),
+    )
+
+
+@router.callback_query(F.data.startswith("sa:adm_del:"))
+async def cb_admin_del(call: CallbackQuery, session: AsyncSession) -> None:
+    if not _guard(call.from_user.id):
+        await call.answer("Ruxsat yo'q.", show_alert=True)
+        return
+    tg_id = int(call.data.split(":")[2])
+    await crud.set_admin(session, tg_id, make_admin=False)
+    admins = await crud.list_admins(session)
+    await call.message.edit_reply_markup(reply_markup=sa_admins_kb(admins))
+    await call.answer("Adminlikdan olindi.")
 
 
 @router.callback_query(F.data == "sa:regions")

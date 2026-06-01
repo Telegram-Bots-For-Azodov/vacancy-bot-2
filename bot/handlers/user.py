@@ -3,11 +3,10 @@ from __future__ import annotations
 from aiogram import F, Router
 from aiogram.filters import CommandObject, CommandStart
 from aiogram.types import CallbackQuery, Message
-from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.config import settings
 from bot.database import crud
+from bot.database.models import User
 from bot.keyboards.user_kb import (
     ALL_DISTRICTS,
     back_menu_kb,
@@ -18,22 +17,15 @@ from bot.keyboards.user_kb import (
     orgs_kb,
     regions_kb,
 )
-from bot.services import currency, notifier
-from bot.services.abkm_api import (
-    ABKMAuthError,
-    ABKMError,
-    consume_auth_error,
-    fetch_organizations,
-    fetch_report_vacancies,
-    fetch_totals,
-)
+from bot.services import currency
 from bot.services.formatter import format_vacancy
+from bot.utils.access import is_admin, is_superadmin
 
 
-def _menu_for(user_id: int):
+def _menu_for(user: User | None):
     return main_menu(
-        is_admin=settings.is_admin(user_id),
-        is_superadmin=settings.is_superadmin(user_id),
+        is_admin=is_admin(user),
+        is_superadmin=is_superadmin(user),
     )
 
 router = Router(name="user")
@@ -58,15 +50,15 @@ def _region_of(soato: int) -> int:
 
 @router.message(CommandStart())
 async def cmd_start(
-    message: Message, session: AsyncSession, command: CommandObject
+    message: Message, session: AsyncSession, command: CommandObject, user: User
 ) -> None:
-    # deep-link: /start v_{soato}_{report_id}_{index} -> shu vakansiyani to'liq ochish
+    # deep-link: /start v_{soato}_{tin}_{index} -> shu vakansiyani to'liq ochish
     payload = (command.args or "").strip()
     if payload.startswith("v_"):
         try:
-            _, soato_s, rid_s, idx_s = payload.split("_")
+            _, soato_s, tin, idx_s = payload.split("_")
             await _start_open_vacancy(
-                message, int(soato_s), int(rid_s), int(idx_s)
+                message, session, int(soato_s), tin, int(idx_s), user
             )
             return
         except (ValueError, IndexError):
@@ -74,37 +66,34 @@ async def cmd_start(
 
     await message.answer(
         WELCOME.format(name=message.from_user.full_name),
-        reply_markup=_menu_for(message.from_user.id),
+        reply_markup=_menu_for(user),
     )
 
 
 async def _start_open_vacancy(
-    message: Message, soato: int, report_id: int, index: int
+    message: Message, session: AsyncSession, soato: int, tin: str, index: int,
+    user: User,
 ) -> None:
-    try:
-        items = await fetch_report_vacancies(soato, report_id)
-    except Exception:  # noqa: BLE001
-        items = []
-
+    region_soato = _region_of(soato)
+    items = await crud.list_company_vacancies(session, region_soato, soato, tin)
     if not items:
         await message.answer(
             "😕 Vakansiya topilmadi yoki muddati o'tgan.",
-            reply_markup=_menu_for(message.from_user.id),
+            reply_markup=_menu_for(user),
         )
         return
 
-    region_soato = _region_of(soato)
     index = index % len(items)
     text = format_vacancy(items[index], index, len(items))
-    kb = org_vacancy_nav_kb(region_soato, soato, report_id, index, len(items), page=0)
+    kb = org_vacancy_nav_kb(region_soato, soato, tin, index, len(items), page=0)
     await message.answer(text, reply_markup=kb)
 
 
 @router.callback_query(F.data == "menu")
-async def cb_menu(call: CallbackQuery) -> None:
+async def cb_menu(call: CallbackQuery, user: User) -> None:
     await call.message.edit_text(
         WELCOME.format(name=call.from_user.full_name),
-        reply_markup=_menu_for(call.from_user.id),
+        reply_markup=_menu_for(user),
     )
     await call.answer()
 
@@ -181,20 +170,10 @@ async def _show_districts(
         await call.answer("Viloyat topilmadi.", show_alert=True)
         return
 
-    await call.answer("⏳ Vakansiyalar soni hisoblanmoqda...")
+    await call.answer()
 
-    soatos = [region_soato] + [d.soato for d in districts]
-    try:
-        counts = await fetch_totals(soatos)
-    except Exception:  # noqa: BLE001
-        logger.exception("fetch_totals failed")
-        counts = {}
-
-    # totals 401 ni yutadi — bayroq orqali tekshirib adminlarni ogohlantiramiz
-    if consume_auth_error():
-        await notifier.notify_token_issue(call.bot)
-
-    region_total = counts.get(region_soato, -1)
+    counts = await crud.district_counts(session, region_soato)
+    region_total = sum(counts.values()) if counts else -1
     multi_region = await crud.count_active_regions(session) > 1
     await call.message.edit_text(
         f"🏙 <b>{region.name}</b>\n"
@@ -223,9 +202,9 @@ async def cb_orgs(call: CallbackQuery, session: AsyncSession) -> None:
 
 @router.callback_query(F.data.startswith("ov:"))
 async def cb_org_vacancy(call: CallbackQuery, session: AsyncSession) -> None:
-    _, region_s, soato_s, rid_s, idx_s, page_s = call.data.split(":")
+    _, region_s, soato_s, tin, idx_s, page_s = call.data.split(":")
     await _show_org_vacancy(
-        call, int(region_s), int(soato_s), int(rid_s), int(idx_s), int(page_s)
+        call, session, int(region_s), int(soato_s), tin, int(idx_s), int(page_s)
     )
 
 
@@ -257,20 +236,8 @@ async def _show_orgs(
     soato: int,
     page: int,
 ) -> None:
-    await call.answer("⏳ Tashkilotlar yuklanmoqda...")
-    try:
-        orgs = await fetch_organizations(soato)
-    except ABKMAuthError:
-        await notifier.notify_token_issue(call.bot)
-        await call.answer(
-            "⚠️ Ma'lumot bazasi tokeni eskirgan. Administrator xabardor qilindi.",
-            show_alert=True,
-        )
-        return
-    except Exception:  # noqa: BLE001
-        logger.exception("orgs fetch failed")
-        await call.answer("⚠️ Ma'lumot olishda xatolik yuz berdi.", show_alert=True)
-        return
+    await call.answer()
+    orgs = await crud.list_companies(session, region_soato, soato)
 
     back_target = await _compute_back_target(session, region_soato)
     name = await _area_name(session, region_soato, soato)
@@ -283,7 +250,7 @@ async def _show_orgs(
         )
         return
 
-    total_vac = sum(int(o.get("count_vacancy", 0) or 0) for o in orgs)
+    total_vac = sum(int(o.get("count", 0) or 0) for o in orgs)
     await call.message.edit_text(
         f"🏙 <b>{name}</b>\n"
         f"🏢 Tashkilotlar: <b>{len(orgs)}</b>  •  💼 Vakansiyalar: <b>{total_vac}</b>\n\n"
@@ -294,30 +261,15 @@ async def _show_orgs(
 
 async def _show_org_vacancy(
     call: CallbackQuery,
+    session: AsyncSession,
     region_soato: int,
     soato: int,
-    report_id: int,
+    company_tin: str,
     index: int,
     page: int,
 ) -> None:
-    try:
-        await call.answer("⏳ Yuklanmoqda...")
-        items = await fetch_report_vacancies(soato, report_id)
-    except ABKMAuthError:
-        await notifier.notify_token_issue(call.bot)
-        await call.answer(
-            "⚠️ Ma'lumot bazasi tokeni eskirgan. Administrator xabardor qilindi.",
-            show_alert=True,
-        )
-        return
-    except ABKMError as e:
-        await call.answer(f"⚠️ {e}", show_alert=True)
-        return
-    except Exception:  # noqa: BLE001
-        logger.exception("report vacancy fetch failed")
-        await call.answer("⚠️ Ma'lumot olishda xatolik yuz berdi.", show_alert=True)
-        return
-
+    await call.answer()
+    items = await crud.list_company_vacancies(session, region_soato, soato, company_tin)
     if not items:
         await call.answer("Bu tashkilotda vakansiya topilmadi.", show_alert=True)
         return
@@ -325,7 +277,7 @@ async def _show_org_vacancy(
     total = len(items)
     index = index % total
     text = format_vacancy(items[index], index, total)
-    kb = org_vacancy_nav_kb(region_soato, soato, report_id, index, total, page)
+    kb = org_vacancy_nav_kb(region_soato, soato, company_tin, index, total, page)
     try:
         await call.message.edit_text(text, reply_markup=kb)
     except Exception:  # noqa: BLE001

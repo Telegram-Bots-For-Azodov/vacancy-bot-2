@@ -22,8 +22,7 @@ class Settings(BaseSettings):
     ADMIN_IDS: str = ""
 
     ABKM_TOKEN: str = ""
-    ABKM_BASE_URL: str = "https://abkm.mehnat.uz/api/vacancy-reports"
-    ABKM_VREPORTS_URL: str = "https://abkm.mehnat.uz/api/v-reports"
+    ABKM_BASE_URL: str = "https://abkm.mehnat.uz/api/service_vacancies"
 
     DEFAULT_YEAR: Optional[int] = None
     DEFAULT_MONTH: Optional[int] = None

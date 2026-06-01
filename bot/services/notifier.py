@@ -7,6 +7,8 @@ from aiogram import Bot
 from loguru import logger
 
 from bot.config import settings
+from bot.database import crud
+from bot.database.db import SessionLocal
 
 _COOLDOWN = 600  # 10 daqiqada bir martadan ko'p ogohlantirmaymiz
 _last_notified: float = 0.0
@@ -35,7 +37,16 @@ async def notify_token_issue(bot: Bot) -> None:
     _last_notified = now
     _notified = True
 
-    recipients = list(dict.fromkeys(settings.superadmin_ids + settings.admin_ids))
+    # .env adminlar + DB'dagi adminlar
+    db_admin_ids: list[int] = []
+    try:
+        async with SessionLocal() as session:
+            db_admin_ids = [a.id for a in await crud.list_admins(session)]
+    except Exception:  # noqa: BLE001
+        pass
+    recipients = list(
+        dict.fromkeys(settings.superadmin_ids + settings.admin_ids + db_admin_ids)
+    )
     for uid in recipients:
         try:
             await bot.send_message(uid, ALERT_TEXT)

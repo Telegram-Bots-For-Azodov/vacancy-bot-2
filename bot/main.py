@@ -16,6 +16,8 @@ from bot.database.db import close_db, init_db
 from bot.database.seed import seed_soato
 from bot.handlers import setup_routers
 from bot.middlewares.auth import AuthMiddleware
+from bot.services.daily import daily_loop
+from bot.services.sync import sync_loop
 from bot.services.token_service import load_token
 
 
@@ -59,10 +61,17 @@ async def main() -> None:
     setup_routers(dp)
     await set_commands(bot)
 
+    # fon: vakansiyalarni sinxronlash (darhol bir marta ishga tushadi)
+    sync_task = asyncio.create_task(sync_loop(bot))
+    # fon: har kuni 00:00 da DAU statistikasi va is_active reseti
+    daily_task = asyncio.create_task(daily_loop())
+
     logger.info("Bot is up.")
     try:
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     finally:
+        sync_task.cancel()
+        daily_task.cancel()
         await close_db()
         await bot.session.close()
         logger.info("Bot stopped.")

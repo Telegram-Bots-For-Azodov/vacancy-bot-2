@@ -1,35 +1,43 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.config import settings
 from bot.database import crud
-from bot.database.models import District, Region
-from bot.keyboards.admin_kb import admin_back, admin_panel, cancel_token
-from bot.services import notifier, token_service
+from bot.database.models import User
+from bot.keyboards.admin_kb import (
+    admin_back,
+    admin_panel,
+    ads_cancel,
+    ads_confirm,
+    cancel_token,
+)
+from bot.services import broadcast, notifier, sync, token_service
 from bot.services.abkm_api import fetch_totals
-from bot.states import TokenStates
+from bot.states import BroadcastStates, TokenStates
+from bot.utils.access import is_admin
+from bot.utils.timez import get_tz, local_day_start_utc, to_local
 
 router = Router(name="admin")
 
 PANEL_TEXT = (
     "🛠 <b>Admin panel</b>\n\n"
-    "Bu yerda ABKM tokenni yangilashingiz va statistikani ko'rishingiz mumkin."
+    "Token, sinxronlash, reklama va statistikani shu yerdan boshqarasiz."
 )
 
 
-def _guard(user_id: int) -> bool:
-    # admin yoki superadmin (is_admin superadmin'ni ham qamrab oladi)
-    return settings.is_admin(user_id)
+def _guard(user: User | None) -> bool:
+    # admin yoki superadmin (DB roli + .env)
+    return is_admin(user)
 
 
 @router.callback_query(F.data == "adm:menu")
-async def cb_panel(call: CallbackQuery, state: FSMContext) -> None:
-    if not _guard(call.from_user.id):
+async def cb_panel(call: CallbackQuery, state: FSMContext, user: User) -> None:
+    if not _guard(user):
         await call.answer("Ruxsat yo'q.", show_alert=True)
         return
     await state.clear()
@@ -38,31 +46,151 @@ async def cb_panel(call: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.callback_query(F.data == "adm:stats")
-async def cb_stats(call: CallbackQuery, session: AsyncSession) -> None:
-    if not _guard(call.from_user.id):
+async def cb_stats(call: CallbackQuery, session: AsyncSession, user: User) -> None:
+    if not _guard(user):
         await call.answer("Ruxsat yo'q.", show_alert=True)
         return
-    users = await crud.count_users(session)
-    regions = (await session.execute(select(func.count(Region.soato)))).scalar() or 0
-    active_regions = await crud.count_active_regions(session)
-    districts = (await session.execute(select(func.count(District.soato)))).scalar() or 0
-    token = token_service.get_token()
-    token_short = f"…{token[-6:]}" if token else "—"
 
+    tz = get_tz()
+    since_utc = local_day_start_utc(datetime.now(tz))
+
+    total = await crud.count_users(session)
+    active = await crud.count_active_today(session)
+    new_today = await crud.count_new_since(session, since_utc)
+    banned = await crud.count_banned(session)
+    admins = await crud.count_admins(session)
+    vacancies = await crud.count_all_vacancies(session)
+    last_sync = await crud.last_sync_at(session)
+    token = token_service.get_token()
+    token_short = f"…{token[-6:]}" if token else "❌ yo'q"
+
+    sync_txt = "—"
+    if last_sync:
+        sync_txt = to_local(last_sync).strftime("%Y-%m-%d %H:%M")
+
+    lines = [
+        "📊 <b>Statistika</b>\n",
+        f"👤 Jami foydalanuvchilar: <b>{total}</b>",
+        f"🟢 Bugun aktiv: <b>{active}</b>",
+        f"🆕 Bugun yangi: <b>{new_today}</b>",
+        f"⛔️ Bloklangan: <b>{banned}</b>",
+        f"👮 Adminlar: <b>{admins}</b>",
+        f"💼 Vakansiyalar: <b>{vacancies}</b>",
+        f"🔄 Oxirgi sync: <b>{sync_txt}</b>",
+        f"🔑 Token: <code>{token_short}</code>",
+    ]
+
+    history = await crud.recent_daily_stats(session, limit=7)
+    if history:
+        lines.append("\n📅 <b>Oxirgi kunlar (DAU):</b>")
+        for d in history:
+            lines.append(
+                f"• {d.day}: 🟢 {d.active_users}  🆕 {d.new_users}  👤 {d.total_users}"
+            )
+
+    await call.message.edit_text("\n".join(lines), reply_markup=admin_back())
+    await call.answer()
+
+
+# ---------------------------------------------------------------- broadcast
+@router.callback_query(F.data == "adm:ads")
+async def cb_ads_start(call: CallbackQuery, state: FSMContext, user: User) -> None:
+    if not _guard(user):
+        await call.answer("Ruxsat yo'q.", show_alert=True)
+        return
+    if broadcast.is_running():
+        await call.answer("⏳ Reklama allaqachon yuborilmoqda.", show_alert=True)
+        return
+    await state.set_state(BroadcastStates.waiting_content)
     await call.message.edit_text(
-        "📊 <b>Statistika</b>\n\n"
-        f"👤 Foydalanuvchilar: <b>{users}</b>\n"
-        f"🗺 Viloyatlar: <b>{active_regions}/{regions}</b> (yoqilgan/jami)\n"
-        f"🏢 Tumanlar: <b>{districts}</b>\n"
-        f"🔑 Joriy token: <code>{token_short}</code>",
-        reply_markup=admin_back(),
+        "📣 <b>Reklama yuborish</b>\n\n"
+        "Yubormoqchi bo'lgan xabarni (matn, rasm, video, ...) shu yerga "
+        "tashlang. Keyin tasdiqlaysiz.",
+        reply_markup=ads_cancel(),
     )
     await call.answer()
 
 
+@router.message(BroadcastStates.waiting_content)
+async def on_ads_content(message: Message, state: FSMContext, user: User) -> None:
+    if not _guard(user):
+        await state.clear()
+        return
+    await state.update_data(
+        from_chat_id=message.chat.id, message_id=message.message_id
+    )
+    await state.set_state(BroadcastStates.confirm)
+    await message.answer(
+        "👆 Mana shu xabar barcha foydalanuvchilarga yuboriladi.\n\n"
+        "Tasdiqlaysizmi?",
+        reply_markup=ads_confirm(),
+    )
+
+
+@router.callback_query(BroadcastStates.confirm, F.data == "adm:ads_go")
+async def cb_ads_go(
+    call: CallbackQuery, state: FSMContext, user: User
+) -> None:
+    if not _guard(user):
+        await call.answer("Ruxsat yo'q.", show_alert=True)
+        return
+    data = await state.get_data()
+    await state.clear()
+    from_chat_id = data.get("from_chat_id")
+    message_id = data.get("message_id")
+    if not from_chat_id or not message_id:
+        await call.answer("Xabar topilmadi, qaytadan boshlang.", show_alert=True)
+        return
+
+    await call.answer("📤 Yuborish boshlandi…")
+    await call.message.edit_text("📤 <b>Reklama yuborilmoqda…</b>")
+    try:
+        res = await broadcast.broadcast(call.bot, from_chat_id, message_id)
+    except Exception:  # noqa: BLE001
+        await call.message.edit_text(
+            "⚠️ Reklama yuborishda xatolik.", reply_markup=admin_back()
+        )
+        return
+
+    await call.message.edit_text(
+        "✅ <b>Reklama yuborildi</b>\n\n"
+        f"📨 Jami: <b>{res['total']}</b>\n"
+        f"✅ Yetkazildi: <b>{res['sent']}</b>\n"
+        f"⚠️ Xato: <b>{res['failed']}</b>\n"
+        f"🗑 O'chirilgan (bloklagan): <b>{res['deleted']}</b>",
+        reply_markup=admin_back(),
+    )
+
+
+# ---------------------------------------------------------------- sync
+@router.callback_query(F.data == "adm:sync")
+async def cb_sync(call: CallbackQuery, user: User) -> None:
+    if not _guard(user):
+        await call.answer("Ruxsat yo'q.", show_alert=True)
+        return
+    if sync.is_running():
+        await call.answer("⏳ Yangilash allaqachon ketmoqda.", show_alert=True)
+        return
+    await call.answer("🔄 Yangilash boshlandi…")
+    await call.message.edit_text(
+        "🔄 <b>Vakansiyalar yangilanmoqda…</b>\n\nBu biroz vaqt olishi mumkin."
+    )
+    try:
+        await sync.sync_all(call.bot)
+        await call.message.edit_text(
+            "✅ <b>Vakansiyalar yangilandi.</b>", reply_markup=admin_back()
+        )
+    except Exception:  # noqa: BLE001
+        await call.message.edit_text(
+            "⚠️ Yangilashda xatolik yuz berdi. Loglarni tekshiring.",
+            reply_markup=admin_back(),
+        )
+
+
+# ---------------------------------------------------------------- token
 @router.callback_query(F.data == "adm:token")
-async def cb_token_start(call: CallbackQuery, state: FSMContext) -> None:
-    if not _guard(call.from_user.id):
+async def cb_token_start(call: CallbackQuery, state: FSMContext, user: User) -> None:
+    if not _guard(user):
         await call.answer("Ruxsat yo'q.", show_alert=True)
         return
     await state.set_state(TokenStates.waiting_token)
@@ -77,8 +205,8 @@ async def cb_token_start(call: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.message(TokenStates.waiting_token, F.text)
-async def on_token_received(message: Message, state: FSMContext) -> None:
-    if not _guard(message.from_user.id):
+async def on_token_received(message: Message, state: FSMContext, user: User) -> None:
+    if not _guard(user):
         await state.clear()
         return
 

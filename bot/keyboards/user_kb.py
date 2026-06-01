@@ -99,52 +99,6 @@ def districts_kb(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def vacancy_nav_kb(
-    region_soato: int,
-    district: str,
-    index: int,
-    total: int,
-    back_target: str = "districts",
-) -> InlineKeyboardMarkup:
-    """back_target: 'districts' | 'regions' | 'menu' — pastdagi chap tugmani belgilaydi."""
-    prev_idx = (index - 1) % total
-    next_idx = (index + 1) % total
-    nav = [
-        InlineKeyboardButton(
-            text="⬅️ Oldingi", callback_data=f"vac:{region_soato}:{district}:{prev_idx}"
-        ),
-        InlineKeyboardButton(text=f"{index + 1}/{total}", callback_data="noop"),
-        InlineKeyboardButton(
-            text="Keyingi ➡️", callback_data=f"vac:{region_soato}:{district}:{next_idx}"
-        ),
-    ]
-    back_row: list[InlineKeyboardButton] = []
-    if back_target == "districts":
-        back_row.append(
-            InlineKeyboardButton(text="⬅️ Tumanlar", callback_data=f"reg:{region_soato}")
-        )
-    elif back_target == "regions":
-        back_row.append(
-            InlineKeyboardButton(text="⬅️ Viloyatlar", callback_data="regions")
-        )
-    back_row.append(InlineKeyboardButton(text="🏠 Bosh menyu", callback_data="menu"))
-    return InlineKeyboardMarkup(inline_keyboard=[nav, back_row])
-
-
-def _back_button(region_soato: int, back_target: str) -> InlineKeyboardButton:
-    if back_target == "districts":
-        return InlineKeyboardButton(text="⬅️ Tumanlar", callback_data=f"reg:{region_soato}")
-    if back_target == "regions":
-        return InlineKeyboardButton(text="⬅️ Viloyatlar", callback_data="regions")
-    return InlineKeyboardButton(text="🏠 Bosh menyu", callback_data="menu")
-
-
-def back_only_kb(region_soato: int, back_target: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[[_back_button(region_soato, back_target)]]
-    )
-
-
 def orgs_kb(
     region_soato: int,
     soato: int,
@@ -152,7 +106,7 @@ def orgs_kb(
     page: int,
     back_target: str = "districts",
 ) -> InlineKeyboardMarkup:
-    """Tashkilotlar ro'yxati (sahifalangan)."""
+    """Korxonalar ro'yxati (sahifalangan). orgs: {tin, name, count}."""
     total = len(orgs)
     pages = max(1, math.ceil(total / ORGS_PER_PAGE))
     page = max(0, min(page, pages - 1))
@@ -161,14 +115,14 @@ def orgs_kb(
 
     rows: list[list[InlineKeyboardButton]] = []
     for o in chunk:
-        name = _short(o.get("company_name") or "Tashkilot")
-        cnt = int(o.get("count_vacancy", 0) or 0)
-        rid = o.get("report_id")
+        name = _short(o.get("name") or "Tashkilot")
+        cnt = int(o.get("count", 0) or 0)
+        tin = o.get("tin")
         rows.append(
             [
                 InlineKeyboardButton(
                     text=f"🏢 {name}  •  {cnt} ta",
-                    callback_data=f"ov:{region_soato}:{soato}:{rid}:0:{page}",
+                    callback_data=f"ov:{region_soato}:{soato}:{tin}:0:{page}",
                 )
             ]
         )
@@ -195,25 +149,26 @@ def orgs_kb(
 def org_vacancy_nav_kb(
     region_soato: int,
     soato: int,
-    report_id: int,
+    company_tin: str,
     index: int,
     total: int,
     page: int,
 ) -> InlineKeyboardMarkup:
-    prev_idx = (index - 1) % total
-    next_idx = (index + 1) % total
+    """Korxona vakansiyalarini aylantiruvchi klaviatura."""
     rows: list[list[InlineKeyboardButton]] = []
     if total > 1:
+        prev_idx = (index - 1) % total
+        next_idx = (index + 1) % total
         rows.append(
             [
                 InlineKeyboardButton(
                     text="⬅️ Oldingi",
-                    callback_data=f"ov:{region_soato}:{soato}:{report_id}:{prev_idx}:{page}",
+                    callback_data=f"ov:{region_soato}:{soato}:{company_tin}:{prev_idx}:{page}",
                 ),
                 InlineKeyboardButton(text=f"{index + 1}/{total}", callback_data="noop"),
                 InlineKeyboardButton(
                     text="Keyingi ➡️",
-                    callback_data=f"ov:{region_soato}:{soato}:{report_id}:{next_idx}:{page}",
+                    callback_data=f"ov:{region_soato}:{soato}:{company_tin}:{next_idx}:{page}",
                 ),
             ]
         )
@@ -221,7 +176,7 @@ def org_vacancy_nav_kb(
         [
             InlineKeyboardButton(
                 text="📤 Ulashish",
-                switch_inline_query=f"v_{soato}_{report_id}_{index}",
+                switch_inline_query=f"v_{soato}_{company_tin}_{index}",
             )
         ]
     )
@@ -235,3 +190,17 @@ def org_vacancy_nav_kb(
         ]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _back_button(region_soato: int, back_target: str) -> InlineKeyboardButton:
+    if back_target == "districts":
+        return InlineKeyboardButton(text="⬅️ Tumanlar", callback_data=f"reg:{region_soato}")
+    if back_target == "regions":
+        return InlineKeyboardButton(text="⬅️ Viloyatlar", callback_data="regions")
+    return InlineKeyboardButton(text="🏠 Bosh menyu", callback_data="menu")
+
+
+def back_only_kb(region_soato: int, back_target: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[_back_button(region_soato, back_target)]]
+    )
