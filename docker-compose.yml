@@ -1,12 +1,14 @@
 services:
   bot:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+      network: host
     image: vacancy-bot:latest
     container_name: vacancy-bot
     restart: always
     env_file: .env
     environment:
-      # SQLite bazani volume ichida saqlaymiz (redeploydan keyin ham qoladi)
       - DB_PATH=/app/data/vacancy.db
     volumes:
       - ./data:/app/data
