@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime
-
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.config import settings
-from bot.database.models import AppSetting, District, Region, Role, User
+from bot.database.models import AppSetting, District, Region, Role, User, utcnow
 
 
 # ---------------------------------------------------------------- users
@@ -23,7 +21,7 @@ async def get_or_create_user(
     tg_id: int,
     username: str | None,
     full_name: str | None,
-) -> User:
+) -> User | type[User]:
     user = await session.get(User, tg_id)
     role = _role_for(tg_id)
     if user is None:
@@ -35,7 +33,7 @@ async def get_or_create_user(
     # keep profile + role fresh
     user.username = username
     user.full_name = full_name
-    user.last_active = datetime.utcnow()
+    user.last_active = utcnow()
     if user.role != role:
         user.role = role
     await session.commit()

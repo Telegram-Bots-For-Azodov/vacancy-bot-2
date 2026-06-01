@@ -1,5 +1,10 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum as PyEnum
+
+
+def utcnow() -> datetime:
+    """Timezone-aware UTC vaqt (datetime.utcnow eskirgan)."""
+    return datetime.now(timezone.utc)
 
 from sqlalchemy import (
     BigInteger,
@@ -32,8 +37,8 @@ class User(Base):
     phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
     role: Mapped[Role] = mapped_column(Enum(Role), default=Role.USER)
     is_banned: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    last_active: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    last_active: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class AppSetting(Base):
