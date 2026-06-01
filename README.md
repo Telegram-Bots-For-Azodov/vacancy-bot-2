@@ -78,6 +78,50 @@ python -m bot.main
 | `DEFAULT_YEAR` | Standart yil (bo'sh = joriy yil)                    |
 | `DEFAULT_MONTH`| Standart oy (bo'sh = joriy oy)                      |
 
+## Docker'da ishga tushirish
+
+```bash
+cp .env.example .env   # to'ldiring
+docker compose up -d --build
+```
+
+SQLite baza `./data` papkasida saqlanadi (konteyner qayta qurilsa ham qoladi),
+loglar `./logs` da.
+
+## CI/CD — `master`ga push qilsangiz avtomatik deploy
+
+`.github/workflows/deploy.yml`: `master` branchга har push'da GitHub Actions
+serverга SSH bilan ulanib, kodni ko'chiradi va `docker compose up -d --build`
+qiladi. Sizdan faqat **GitHub Secrets** to'ldirish kerak (boshqa hech narsa).
+
+**GitHub → Settings → Secrets and variables → Actions → New repository secret:**
+
+| Secret | Tavsif |
+|---|---|
+| `SSH_HOST` | Server IP yoki domeni |
+| `SSH_USER` | SSH foydalanuvchi (masalan `root` yoki `ubuntu`) |
+| `SSH_KEY` | SSH **maxfiy** kaliti (to'liq matni) |
+| `SSH_PORT` | (ixtiyoriy) SSH porti, standart 22 |
+| `BOT_TOKEN` | Telegram bot tokeni |
+| `SUPERADMIN_IDS` | Superadmin ID lari (vergul bilan) |
+| `ADMIN_IDS` | (ixtiyoriy) yordamchi admin ID lari |
+| `ABKM_TOKEN` | ABKM boshlang'ich tokeni |
+| `DEFAULT_YEAR` / `DEFAULT_MONTH` | (ixtiyoriy) |
+
+**Serverda bir martalik tayyorgarlik:**
+1. Docker va Compose plugin o'rnatilgan bo'lsin
+   (`curl -fsSL https://get.docker.com | sh`).
+2. SSH **ochiq** kalitini serverga qo'shing
+   (`~/.ssh/authorized_keys`), maxfiy kalitni `SSH_KEY` secret'ga joylang.
+
+Tayyor. Endi `git push origin master` — qolganini Actions bajaradi:
+`build-check` (sintaksis) → kodni ko'chirish → `.env` ni secret'lardan yaratish
+→ `docker compose up -d --build`.
+
+> **Token haqida:** ishga tushgach token **bazada** saqlanadi va `🛠 Admin panel
+> → 🔑 ABKM tokenni yangilash` orqali boshqariladi. `ABKM_TOKEN` secret faqat
+> birinchi marta (baza bo'sh bo'lganda) ishlatiladi.
+
 ## SOATO kodlarini qo'shish
 
 `bot/data/soato_seed.json` faylini tahrirlang. Har bir viloyat va uning

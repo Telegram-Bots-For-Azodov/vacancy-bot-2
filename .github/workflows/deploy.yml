@@ -1,0 +1,56 @@
+name: Deploy
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch: {}   # qo'lda ham ishga tushirish mumkin
+
+jobs:
+  build-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Sintaksis tekshiruvi
+        run: python -m compileall bot
+
+  deploy:
+    needs: build-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Kodni serverga ko'chirish
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          source: "bot,requirements.txt,Dockerfile,docker-compose.yml,.dockerignore"
+          target: "~/vacancy-bot"
+          overwrite: true
+
+      - name: Serverda deploy (Docker)
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            set -e
+            cd ~/vacancy-bot
+            cat > .env <<'EOF'
+            BOT_TOKEN=${{ secrets.BOT_TOKEN }}
+            SUPERADMIN_IDS=${{ secrets.SUPERADMIN_IDS }}
+            ADMIN_IDS=${{ secrets.ADMIN_IDS }}
+            ABKM_TOKEN=${{ secrets.ABKM_TOKEN }}
+            DEFAULT_YEAR=${{ secrets.DEFAULT_YEAR }}
+            DEFAULT_MONTH=${{ secrets.DEFAULT_MONTH }}
+            LOG_LEVEL=INFO
+            EOF
+            docker compose up -d --build
+            docker image prune -f
