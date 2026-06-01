@@ -23,7 +23,8 @@ from bot.services.token_service import get_token
 _CACHE_TTL = 600  # 10 daqiqa
 _SYNC_PER_PAGE = 500  # sinxronlashda bitta sahifada nechta olish
 _MAX_PAGES = 1000  # himoya chegarasi
-_SYNC_CONCURRENCY = 8  # sinxronlashda bir vaqtda nechta sahifa so'rovi
+_SYNC_CONCURRENCY = 4  # sinxronlashda bir vaqtda nechta sahifa so'rovi
+_RETRIES = 3  # tarmoq xatosida qayta urinish soni
 
 # kesh: (soato, published) -> (ts, total)
 _count_cache: dict[tuple, tuple[float, int]] = {}
@@ -88,14 +89,14 @@ def _build_filter(
     return json.dumps(f, ensure_ascii=False)
 
 
-async def _get_page(
+async def _get_page_once(
     session: aiohttp.ClientSession,
     soato: int,
     page: int,
     limit: int,
     published_only: bool,
 ) -> tuple[list[dict], int]:
-    """Bitta sahifa: (items, total)."""
+    """Bitta sahifa (bitta urinish): (items, total)."""
     params = {
         "page": page,
         "start": (page - 1) * limit,
@@ -109,7 +110,7 @@ async def _get_page(
         params=params,
         headers=_headers(),
         cookies=cookies,
-        timeout=aiohttp.ClientTimeout(total=30),
+        timeout=aiohttp.ClientTimeout(total=60),
     ) as resp:
         if resp.status == 401:
             _flag_auth_error()
@@ -121,6 +122,34 @@ async def _get_page(
         raise ABKMError("API muvaffaqiyatsiz javob qaytardi.")
     data = payload.get("data", {}) or {}
     return data.get("data", []) or [], int(data.get("total", 0) or 0)
+
+
+async def _get_page(
+    session: aiohttp.ClientSession,
+    soato: int,
+    page: int,
+    limit: int,
+    published_only: bool,
+) -> tuple[list[dict], int]:
+    """Tarmoq xatolarida qayta uringan holda bitta sahifani oladi.
+
+    401 (auth) darhol uzatiladi — qayta urinishdan foyda yo'q.
+    Timeout / ulanish xatolarida eksponensial kutib qayta uriniladi.
+    """
+    last_exc: Exception | None = None
+    for attempt in range(1, _RETRIES + 1):
+        try:
+            return await _get_page_once(session, soato, page, limit, published_only)
+        except ABKMAuthError:
+            raise
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+            last_exc = e
+            if attempt < _RETRIES:
+                await asyncio.sleep(attempt * 2)  # 2s, 4s
+                logger.warning(
+                    f"abkm: soato={soato} page={page} urinish {attempt} xato: {e}"
+                )
+    raise ABKMError(f"API so'rovi {_RETRIES} marta muvaffaqiyatsiz: {last_exc}")
 
 
 # ---------------------------------------------------------------- fetch all
