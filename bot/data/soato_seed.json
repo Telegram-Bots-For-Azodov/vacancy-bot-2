@@ -1,0 +1,311 @@
+{
+  "_comment": "SOATO seed — O'zbekiston bo'yicha to'liq (14 viloyat + tumanlar). Manba: abkm.mehnat.uz m-org-structure. Viloyat ORDER bo'yicha, tumanlar ham ORDER bo'yicha tartiblangan. Tahrirlab botni qayta ishga tushirsangiz upsert qilinadi.",
+  "regions": [
+    {
+      "soato": 1735,
+      "name": "Qoraqalpog'iston Respublikasi",
+      "sort_order": 1,
+      "districts": [
+        { "soato": 1735401, "name": "Nukus shahar", "sort_order": 1 },
+        { "soato": 1735204, "name": "Amudaryo tumani", "sort_order": 2 },
+        { "soato": 1735207, "name": "Beruniy tumani", "sort_order": 3 },
+        { "soato": 1735209, "name": "Bo'zatov tumani", "sort_order": 4 },
+        { "soato": 1735212, "name": "Kegeyli tumani", "sort_order": 5 },
+        { "soato": 1735218, "name": "Qonliko'l tumani", "sort_order": 6 },
+        { "soato": 1735211, "name": "Qorao'zyak tumani", "sort_order": 7 },
+        { "soato": 1735215, "name": "Qo'ng'irot tumani", "sort_order": 8 },
+        { "soato": 1735222, "name": "Muynoq tumani", "sort_order": 9 },
+        { "soato": 1735225, "name": "Nukus tumani", "sort_order": 10 },
+        { "soato": 1735228, "name": "Taxiatosh tumani", "sort_order": 11 },
+        { "soato": 1735230, "name": "Taxtako'prik tumani", "sort_order": 12 },
+        { "soato": 1735233, "name": "To'rtko'l tumani", "sort_order": 13 },
+        { "soato": 1735236, "name": "Xo'jayli tumani", "sort_order": 14 },
+        { "soato": 1735240, "name": "Chimboy tumani", "sort_order": 15 },
+        { "soato": 1735243, "name": "Shumanay tumani", "sort_order": 16 },
+        { "soato": 1735250, "name": "Ellikqal'a tumani", "sort_order": 17 }
+      ]
+    },
+    {
+      "soato": 1703,
+      "name": "Andijon viloyati",
+      "sort_order": 2,
+      "districts": [
+        { "soato": 1703401, "name": "Andijon shahar", "sort_order": 1 },
+        { "soato": 1703408, "name": "Xonobod shahar", "sort_order": 2 },
+        { "soato": 1703224, "name": "Asaka tumani", "sort_order": 3 },
+        { "soato": 1703203, "name": "Andijon tumani", "sort_order": 4 },
+        { "soato": 1703206, "name": "Baliqchi tumani", "sort_order": 5 },
+        { "soato": 1703209, "name": "Bo'ston tumani", "sort_order": 6 },
+        { "soato": 1703210, "name": "Buloqboshi tumani", "sort_order": 7 },
+        { "soato": 1703211, "name": "Jalolquduq tumani", "sort_order": 8 },
+        { "soato": 1703214, "name": "Izboskan tumani", "sort_order": 9 },
+        { "soato": 1703220, "name": "Qo'rg'ontepa tumani", "sort_order": 10 },
+        { "soato": 1703227, "name": "Marxamat tumani", "sort_order": 11 },
+        { "soato": 1703202, "name": "Oltinko'l tumani", "sort_order": 12 },
+        { "soato": 1703232, "name": "Paxtaobod tumani", "sort_order": 13 },
+        { "soato": 1703217, "name": "Ulug'nor tumani", "sort_order": 14 },
+        { "soato": 1703236, "name": "Ho'jaobod tumani", "sort_order": 15 },
+        { "soato": 1703230, "name": "Shaxrixon tumani", "sort_order": 16 }
+      ]
+    },
+    {
+      "soato": 1706,
+      "name": "Buxoro viloyati",
+      "sort_order": 3,
+      "districts": [
+        { "soato": 1706401, "name": "Buxoro shahar", "sort_order": 1 },
+        { "soato": 1706403, "name": "Kogon shahar", "sort_order": 2 },
+        { "soato": 1706207, "name": "Buxoro tumani", "sort_order": 3 },
+        { "soato": 1706212, "name": "Vobkent tumani", "sort_order": 4 },
+        { "soato": 1706215, "name": "G'ijduvon tumani", "sort_order": 5 },
+        { "soato": 1706246, "name": "Jondor tumani", "sort_order": 6 },
+        { "soato": 1706219, "name": "Kogon tumani", "sort_order": 7 },
+        { "soato": 1706232, "name": "Qorovulbozor tumani", "sort_order": 8 },
+        { "soato": 1706230, "name": "Qorako'l tumani", "sort_order": 9 },
+        { "soato": 1706204, "name": "Olot tumani", "sort_order": 10 },
+        { "soato": 1706240, "name": "Peshko' tumani", "sort_order": 11 },
+        { "soato": 1706242, "name": "Romitan tumani", "sort_order": 12 },
+        { "soato": 1706258, "name": "Shofirkon tumani", "sort_order": 13 }
+      ]
+    },
+    {
+      "soato": 1708,
+      "name": "Jizzax viloyati",
+      "sort_order": 4,
+      "districts": [
+        { "soato": 1708401, "name": "Jizzax shahar", "sort_order": 1 },
+        { "soato": 1708201, "name": "Arnasoy tumani", "sort_order": 2 },
+        { "soato": 1708204, "name": "Baxmal tumani", "sort_order": 3 },
+        { "soato": 1708209, "name": "G'allaorol tumani", "sort_order": 4 },
+        { "soato": 1708212, "name": "Sharof Rashidov tumani", "sort_order": 5 },
+        { "soato": 1708215, "name": "Do'stlik tumani", "sort_order": 6 },
+        { "soato": 1708218, "name": "Zomin tumani", "sort_order": 7 },
+        { "soato": 1708220, "name": "Zarbdor tumani", "sort_order": 8 },
+        { "soato": 1708225, "name": "Zafarobod tumani", "sort_order": 9 },
+        { "soato": 1708223, "name": "Mirzacho'l tumani", "sort_order": 10 },
+        { "soato": 1708228, "name": "Paxtakor tumani", "sort_order": 11 },
+        { "soato": 1708235, "name": "Forish tumani", "sort_order": 12 },
+        { "soato": 1708237, "name": "Yangiobod tumani", "sort_order": 13 }
+      ]
+    },
+    {
+      "soato": 1710,
+      "name": "Qashqadaryo viloyati",
+      "sort_order": 5,
+      "districts": [
+        { "soato": 1710401, "name": "Qarshi shahar", "sort_order": 1 },
+        { "soato": 1710405, "name": "Shahrisabz shahar", "sort_order": 2 },
+        { "soato": 1710207, "name": "G'uzor tumani", "sort_order": 3 },
+        { "soato": 1710212, "name": "Dexqonobod tumani", "sort_order": 4 },
+        { "soato": 1710237, "name": "Kasbi tumani", "sort_order": 5 },
+        { "soato": 1710232, "name": "Kitob tumani", "sort_order": 6 },
+        { "soato": 1710229, "name": "Koson tumani", "sort_order": 7 },
+        { "soato": 1710240, "name": "Ko'kdala tumani", "sort_order": 8 },
+        { "soato": 1710220, "name": "Qamashi tumani", "sort_order": 9 },
+        { "soato": 1710224, "name": "Qarshi tumani", "sort_order": 10 },
+        { "soato": 1710233, "name": "Mirishkor tumani", "sort_order": 11 },
+        { "soato": 1710234, "name": "Muborak tumani", "sort_order": 12 },
+        { "soato": 1710235, "name": "Nishon tumani", "sort_order": 13 },
+        { "soato": 1710242, "name": "Chiroqchi tumani", "sort_order": 14 },
+        { "soato": 1710245, "name": "Shaxrisabz tumani", "sort_order": 15 },
+        { "soato": 1710250, "name": "Yakkabog' tumani", "sort_order": 16 }
+      ]
+    },
+    {
+      "soato": 1712,
+      "name": "Navoiy viloyati",
+      "sort_order": 6,
+      "districts": [
+        { "soato": 1712401, "name": "Navoiy shahar", "sort_order": 1 },
+        { "soato": 1712408, "name": "Zarafshon shahar", "sort_order": 2 },
+        { "soato": 1712412, "name": "G'azg'on shahar", "sort_order": 3 },
+        { "soato": 1712234, "name": "Karmana tumani", "sort_order": 4 },
+        { "soato": 1712211, "name": "Konimex tumani", "sort_order": 5 },
+        { "soato": 1712216, "name": "Qiziltepa tumani", "sort_order": 6 },
+        { "soato": 1712230, "name": "Navbaxor tumani", "sort_order": 7 },
+        { "soato": 1712238, "name": "Nurota tumani", "sort_order": 8 },
+        { "soato": 1712244, "name": "Tomdi tumani", "sort_order": 9 },
+        { "soato": 1712248, "name": "Uchquduq tumani", "sort_order": 10 },
+        { "soato": 1712251, "name": "Xatirchi tumani", "sort_order": 11 }
+      ]
+    },
+    {
+      "soato": 1714,
+      "name": "Namangan viloyati",
+      "sort_order": 7,
+      "districts": [
+        { "soato": 1714401, "name": "Namangan shahar", "sort_order": 1 },
+        { "soato": 1714365, "name": "Davlatobod tumani", "sort_order": 2 },
+        { "soato": 1714207, "name": "Kosonsoy tumani", "sort_order": 3 },
+        { "soato": 1714204, "name": "Mingbuloq tumani", "sort_order": 4 },
+        { "soato": 1714212, "name": "Namangan tumani", "sort_order": 5 },
+        { "soato": 1714216, "name": "Norin tumani", "sort_order": 6 },
+        { "soato": 1714219, "name": "Pop tumani", "sort_order": 7 },
+        { "soato": 1714224, "name": "To'raqo'rg'on tumani", "sort_order": 8 },
+        { "soato": 1714229, "name": "Uychi tumani", "sort_order": 9 },
+        { "soato": 1714234, "name": "Uchqo'rg'on tumani", "sort_order": 10 },
+        { "soato": 1714236, "name": "Chortoq tumani", "sort_order": 11 },
+        { "soato": 1714237, "name": "Chust tumani", "sort_order": 12 },
+        { "soato": 1714242, "name": "Yangiqo'rg'on tumani", "sort_order": 13 },
+        { "soato": 1714367, "name": "Yangi Namangan tumani", "sort_order": 14 }
+      ]
+    },
+    {
+      "soato": 1718,
+      "name": "Samarqand viloyati",
+      "sort_order": 8,
+      "districts": [
+        { "soato": 1718401, "name": "Samarqand shahar", "sort_order": 1 },
+        { "soato": 1718406, "name": "Kattaqo'rg'on shahar", "sort_order": 2 },
+        { "soato": 1718206, "name": "Bulung'ur tumani", "sort_order": 3 },
+        { "soato": 1718209, "name": "Jomboy tumani", "sort_order": 4 },
+        { "soato": 1718212, "name": "Ishtixon tumani", "sort_order": 5 },
+        { "soato": 1718215, "name": "Kattaqo'rg'on tumani", "sort_order": 6 },
+        { "soato": 1718216, "name": "Qo'shrabod tumani", "sort_order": 7 },
+        { "soato": 1718218, "name": "Narpay tumani", "sort_order": 8 },
+        { "soato": 1718235, "name": "Nurobod tumani", "sort_order": 9 },
+        { "soato": 1718203, "name": "Oqdaryo tumani", "sort_order": 10 },
+        { "soato": 1718224, "name": "Payariq tumani", "sort_order": 11 },
+        { "soato": 1718227, "name": "Pastdarg'om tumani", "sort_order": 12 },
+        { "soato": 1718230, "name": "Paxtachi tumani", "sort_order": 13 },
+        { "soato": 1718233, "name": "Samarqand tumani", "sort_order": 14 },
+        { "soato": 1718238, "name": "Tayloq tumani", "sort_order": 15 },
+        { "soato": 1718236, "name": "Urgut tumani", "sort_order": 16 }
+      ]
+    },
+    {
+      "soato": 1722,
+      "name": "Surxondaryo viloyati",
+      "sort_order": 9,
+      "districts": [
+        { "soato": 1722401, "name": "Termiz shahar", "sort_order": 1 },
+        { "soato": 1722202, "name": "Angor tumani", "sort_order": 2 },
+        { "soato": 1722203, "name": "Bandixon tumani", "sort_order": 3 },
+        { "soato": 1722204, "name": "Boysun tumani", "sort_order": 4 },
+        { "soato": 1722210, "name": "Denov tumani", "sort_order": 5 },
+        { "soato": 1722212, "name": "Jarqo'rg'on tumani", "sort_order": 6 },
+        { "soato": 1722215, "name": "Qiziriq tumani", "sort_order": 7 },
+        { "soato": 1722214, "name": "Qumqo'rg'on tumani", "sort_order": 8 },
+        { "soato": 1722207, "name": "Muzrabot tumani", "sort_order": 9 },
+        { "soato": 1722201, "name": "Oltinsoy tumani", "sort_order": 10 },
+        { "soato": 1722217, "name": "Sariosiyo tumani", "sort_order": 11 },
+        { "soato": 1722220, "name": "Termiz tumani", "sort_order": 12 },
+        { "soato": 1722221, "name": "Uzun tumani", "sort_order": 13 },
+        { "soato": 1722223, "name": "Sherobod tumani", "sort_order": 14 },
+        { "soato": 1722226, "name": "Sho'rchi tumani", "sort_order": 15 }
+      ]
+    },
+    {
+      "soato": 1724,
+      "name": "Sirdaryo viloyati",
+      "sort_order": 10,
+      "districts": [
+        { "soato": 1724401, "name": "Guliston shahar", "sort_order": 1 },
+        { "soato": 1724413, "name": "Yangiyer shahar", "sort_order": 2 },
+        { "soato": 1724410, "name": "Shirin shahar", "sort_order": 3 },
+        { "soato": 1724212, "name": "Boyovut tumani", "sort_order": 4 },
+        { "soato": 1724220, "name": "Guliston tumani", "sort_order": 5 },
+        { "soato": 1724228, "name": "Mirzaobod tumani", "sort_order": 6 },
+        { "soato": 1724206, "name": "Oqoltin tumani", "sort_order": 7 },
+        { "soato": 1724216, "name": "Sayxunobod tumani", "sort_order": 8 },
+        { "soato": 1724226, "name": "Sardoba tumani", "sort_order": 9 },
+        { "soato": 1724231, "name": "Sirdaryo tumani", "sort_order": 10 },
+        { "soato": 1724235, "name": "Xovos tumani", "sort_order": 11 }
+      ]
+    },
+    {
+      "soato": 1727,
+      "name": "Toshkent viloyati",
+      "sort_order": 11,
+      "districts": [
+        { "soato": 1727401, "name": "Nurafshon shahar", "sort_order": 1 },
+        { "soato": 1727419, "name": "Chirchiq shahar", "sort_order": 2 },
+        { "soato": 1727407, "name": "Angren shahar", "sort_order": 3 },
+        { "soato": 1727413, "name": "Bekobod shahar", "sort_order": 4 },
+        { "soato": 1727404, "name": "Olmaliq shahar", "sort_order": 5 },
+        { "soato": 1727415, "name": "Oxangaron shahar", "sort_order": 6 },
+        { "soato": 1727424, "name": "Yangiyo'l shahar", "sort_order": 7 },
+        { "soato": 1727220, "name": "Bekobod tumani", "sort_order": 8 },
+        { "soato": 1727228, "name": "Bo'ka tumani", "sort_order": 9 },
+        { "soato": 1727224, "name": "Bo'stonliq tumani", "sort_order": 10 },
+        { "soato": 1727237, "name": "Zangiota tumani", "sort_order": 11 },
+        { "soato": 1727248, "name": "Qibray tumani", "sort_order": 12 },
+        { "soato": 1727233, "name": "Quyichirchiq tumani", "sort_order": 13 },
+        { "soato": 1727206, "name": "Oqqo'rg'on tumani", "sort_order": 14 },
+        { "soato": 1727212, "name": "Oxangaron tumani", "sort_order": 15 },
+        { "soato": 1727249, "name": "Parkent tumani", "sort_order": 16 },
+        { "soato": 1727250, "name": "Piskent tumani", "sort_order": 17 },
+        { "soato": 1727265, "name": "Toshkent tumani", "sort_order": 18 },
+        { "soato": 1727253, "name": "O'rtachirchiq tumani", "sort_order": 19 },
+        { "soato": 1727256, "name": "Chinoz tumani", "sort_order": 20 },
+        { "soato": 1727239, "name": "Yuqorichirchiq tumani", "sort_order": 21 },
+        { "soato": 1727259, "name": "Yangiyo'l tumani", "sort_order": 22 }
+      ]
+    },
+    {
+      "soato": 1730,
+      "name": "Farg'ona viloyati",
+      "sort_order": 12,
+      "districts": [
+        { "soato": 1730401, "name": "Farg'ona shahar", "sort_order": 1 },
+        { "soato": 1730405, "name": "Qo'qon shahar", "sort_order": 2 },
+        { "soato": 1730412, "name": "Marg'ilon shahar", "sort_order": 3 },
+        { "soato": 1730408, "name": "Quvasoy shahar", "sort_order": 4 },
+        { "soato": 1730215, "name": "Beshariq tumani", "sort_order": 5 },
+        { "soato": 1730209, "name": "Bog'dod tumani", "sort_order": 6 },
+        { "soato": 1730212, "name": "Buvayda tumani", "sort_order": 7 },
+        { "soato": 1730236, "name": "Dang'ara tumani", "sort_order": 8 },
+        { "soato": 1730242, "name": "Yozyovon tumani", "sort_order": 9 },
+        { "soato": 1730218, "name": "Quva tumani", "sort_order": 10 },
+        { "soato": 1730206, "name": "Qo'shtepa tumani", "sort_order": 11 },
+        { "soato": 1730203, "name": "Oltiariq tumani", "sort_order": 12 },
+        { "soato": 1730224, "name": "Rishton tumani", "sort_order": 13 },
+        { "soato": 1730226, "name": "So'x tumani", "sort_order": 14 },
+        { "soato": 1730227, "name": "Toshloq tumani", "sort_order": 15 },
+        { "soato": 1730230, "name": "O'zbekiston tumani", "sort_order": 16 },
+        { "soato": 1730221, "name": "Uchko'prik tumani", "sort_order": 17 },
+        { "soato": 1730233, "name": "Farg'ona tumani", "sort_order": 18 },
+        { "soato": 1730238, "name": "Furqat tumani", "sort_order": 19 }
+      ]
+    },
+    {
+      "soato": 1733,
+      "name": "Xorazm viloyati",
+      "sort_order": 13,
+      "districts": [
+        { "soato": 1733401, "name": "Urganch shahar", "sort_order": 1 },
+        { "soato": 1733406, "name": "Xiva shahar", "sort_order": 2 },
+        { "soato": 1733204, "name": "Bog'ot tumani", "sort_order": 3 },
+        { "soato": 1733208, "name": "Gurlan tumani", "sort_order": 4 },
+        { "soato": 1733212, "name": "Qo'shko'pir tumani", "sort_order": 5 },
+        { "soato": 1733221, "name": "Tuproqqal'a tumani", "sort_order": 6 },
+        { "soato": 1733217, "name": "Urganch tumani", "sort_order": 7 },
+        { "soato": 1733226, "name": "Xiva tumani", "sort_order": 8 },
+        { "soato": 1733220, "name": "Xazorasp tumani", "sort_order": 9 },
+        { "soato": 1733223, "name": "Xonqa tumani", "sort_order": 10 },
+        { "soato": 1733230, "name": "Shovot tumani", "sort_order": 11 },
+        { "soato": 1733233, "name": "Yangiariq tumani", "sort_order": 12 },
+        { "soato": 1733236, "name": "Yangibozor tumani", "sort_order": 13 }
+      ]
+    },
+    {
+      "soato": 1726,
+      "name": "Toshkent shahri",
+      "sort_order": 14,
+      "districts": [
+        { "soato": 1726264, "name": "Bektemir tumani", "sort_order": 1 },
+        { "soato": 1726273, "name": "Mirobod tumani", "sort_order": 2 },
+        { "soato": 1726269, "name": "Mirzo Ulug'bek tumani", "sort_order": 3 },
+        { "soato": 1726280, "name": "Olmazor tumani", "sort_order": 4 },
+        { "soato": 1726283, "name": "Sergeli tumani", "sort_order": 5 },
+        { "soato": 1726262, "name": "Uchtepa tumani", "sort_order": 6 },
+        { "soato": 1726294, "name": "Chilonzor tumani", "sort_order": 7 },
+        { "soato": 1726277, "name": "Shayxontoxur tumani", "sort_order": 8 },
+        { "soato": 1726290, "name": "Yashnobod tumani", "sort_order": 9 },
+        { "soato": 1726266, "name": "Yunusobod tumani", "sort_order": 10 },
+        { "soato": 1726287, "name": "Yakkasaroy tumani", "sort_order": 11 },
+        { "soato": 1726292, "name": "Yangihayot tumani", "sort_order": 12 }
+      ]
+    }
+  ]
+}
