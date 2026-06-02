@@ -6,6 +6,7 @@ import sys
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
+from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand, BotCommandScopeAllPrivateChats
@@ -47,8 +48,15 @@ async def main() -> None:
     await seed_soato()
     await load_token()
 
+    # Telegram'ga ulanish sessiyasi (proxy ixtiyoriy — bloklangan tarmoqlar uchun)
+    proxy = settings.TELEGRAM_PROXY or None
+    session = AiohttpSession(proxy=proxy, timeout=60)
+    if proxy:
+        logger.info("Telegram proxy orqali ishlaydi.")
+
     bot = Bot(
         token=settings.BOT_TOKEN,
+        session=session,
         default=DefaultBotProperties(
             parse_mode=ParseMode.HTML, link_preview_is_disabled=True
         ),
@@ -59,7 +67,12 @@ async def main() -> None:
     dp.callback_query.middleware(AuthMiddleware())
 
     setup_routers(dp)
-    await set_commands(bot)
+
+    # set_commands tarmoq xatosida botni yiqitmasin
+    try:
+        await set_commands(bot)
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"set_commands o'tkazib yuborildi (tarmoq?): {e}")
 
     # fon: vakansiyalarni sinxronlash (darhol bir marta ishga tushadi)
     sync_task = asyncio.create_task(sync_loop(bot))

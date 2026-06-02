@@ -45,6 +45,7 @@ jobs:
             cd ~/vacancy-bot
             cat > .env <<'EOF'
             BOT_TOKEN=${{ secrets.BOT_TOKEN }}
+            TELEGRAM_PROXY=${{ secrets.TELEGRAM_PROXY }}
             SUPERADMIN_IDS=${{ secrets.SUPERADMIN_IDS }}
             ADMIN_IDS=${{ secrets.ADMIN_IDS }}
             ABKM_TOKEN=${{ secrets.ABKM_TOKEN }}

@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     )
 
     BOT_TOKEN: str = ""
+    # Telegram'ga ulanish uchun proxy (Rossiya kabi bloklangan joylarda kerak).
+    # Masalan: http://user:pass@host:port  yoki  socks5://host:port
+    TELEGRAM_PROXY: str = ""
     # vergul bilan ajratilgan ID lar, masalan "123,456". String sifatida o'qiladi,
     # so'ng property'lar orqali ro'yxatga aylantiriladi.
     SUPERADMIN_IDS: str = ""
