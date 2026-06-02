@@ -412,6 +412,49 @@ async def replace_region_vacancies(
     return len(objs)
 
 
+async def replace_district_vacancies(
+    session: AsyncSession,
+    region_soato: int,
+    district_soato: int,
+    vacancies: list[dict],
+) -> int:
+    """Faqat bitta tumanning vakansiyalarini o'chirib, yangilarini yozadi.
+
+    Har tuman javobi kelganda alohida chaqiriladi (butun viloyat kutilmaydi).
+    """
+    await session.execute(
+        delete(Vacancy).where(
+            Vacancy.region_soato == region_soato,
+            Vacancy.soato == district_soato,
+        )
+    )
+    objs: list[Vacancy] = []
+    seen: set[int] = set()
+    for v in vacancies:
+        try:
+            vid = int(v["id"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if vid in seen:
+            continue
+        seen.add(vid)
+        objs.append(
+            Vacancy(
+                id=vid,
+                region_soato=region_soato,
+                soato=district_soato,
+                company_tin=str(v.get("company_tin") or ""),
+                company_name=(v.get("company_name") or "")[:256],
+                position_name=(v.get("position_name") or "")[:256],
+                order_key=str(v.get("created_at") or ""),
+                raw=json.dumps(v, ensure_ascii=False),
+            )
+        )
+    session.add_all(objs)
+    await session.commit()
+    return len(objs)
+
+
 async def district_counts(
     session: AsyncSession, region_soato: int
 ) -> dict[int, int]:

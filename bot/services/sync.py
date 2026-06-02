@@ -29,58 +29,58 @@ def is_running() -> bool:
 async def sync_region(region_soato: int) -> int:
     """Bitta viloyatni tumanlar kesimida KETMA-KET sinxronlaydi.
 
-    Tumanlar bittadan (parallel emas) yuklanadi. Natija birlashtirilib,
-    viloyat yozuvlari atomik qayta yoziladi. Saqlangan sonni qaytaradi.
-
-    Agar biror tuman butunlay yuklanmasa, viloyat bazasi YANGILANMAYDI —
-    eski (to'liq) ma'lumot saqlanib qoladi, qisman/bo'sh yozib yuborilmaydi.
+    Har tuman javobi kelishi bilan O'SHA TUMAN darrov bazaga yoziladi
+    (butun viloyat kutilmaydi). Tuman yuklanmasa — uning eski ma'lumoti
+    saqlanib qoladi (boshqa tumanlarga ta'sir qilmaydi). Jami saqlangan
+    vakansiyalar sonini qaytaradi.
     """
     async with SessionLocal() as session:
         districts = await crud.list_districts(session, region_soato)
 
-    soatos = [d.soato for d in districts] or [region_soato]
+    # tumanlar bo'lmasa — viloyat darajasida bitta o'tish (kamdan-kam holat)
+    if not districts:
+        items = await fetch_all(region_soato)
+        async with SessionLocal() as session:
+            n = await crud.replace_region_vacancies(session, region_soato, items)
+        logger.info(f"sync: viloyat {region_soato} (tumansiz) -> {n} ta saqlandi")
+        return n
 
+    total_saved = 0
     failed: list[int] = []
-    chunks: list[list[dict]] = []
 
-    # tumanma-tuman, ketma-ket
-    for soato in soatos:
+    for d in districts:
         try:
-            chunks.append(await fetch_all(soato))
+            items = await fetch_all(d.soato)
         except ABKMAuthError:
             # token eskirgan — butun sinxronlashni to'xtatamiz
             raise ABKMAuthError("API token eskirgan (tuman sinxronlashda).")
         except Exception:  # noqa: BLE001
-            logger.exception(f"sync: tuman {soato} yuklashda xato")
-            failed.append(soato)
-            chunks.append([])
+            logger.exception(f"sync: tuman {d.soato} yuklashda xato — o'tkazildi")
+            failed.append(d.soato)
+            continue
 
-    # qisman muvaffaqiyatsizlik — eski ma'lumotni saqlaymiz, ustiga yozmaymiz
+        # javob keldi — darrov shu tumanni yozamiz
+        try:
+            async with SessionLocal() as session:
+                n = await crud.replace_district_vacancies(
+                    session, region_soato, d.soato, items
+                )
+            total_saved += n
+            logger.info(f"sync: tuman {d.soato} -> {n} ta saqlandi")
+        except Exception:  # noqa: BLE001
+            logger.exception(f"sync: tuman {d.soato} yozishda xato")
+            failed.append(d.soato)
+
     if failed:
         logger.warning(
-            f"sync: viloyat {region_soato} — {len(failed)} tuman yuklanmadi "
-            f"({failed[:5]}...), baza yangilanmadi (eski ma'lumot saqlandi)"
-        )
-        return -1
-
-    # id bo'yicha takrorlanmas (tumanlar bo'ylab ham)
-    uniq: dict[int, dict] = {}
-    for chunk in chunks:
-        for v in chunk:
-            try:
-                uniq[int(v["id"])] = v
-            except (KeyError, TypeError, ValueError):
-                continue
-
-    async with SessionLocal() as session:
-        n = await crud.replace_region_vacancies(
-            session, region_soato, list(uniq.values())
+            f"sync: viloyat {region_soato} — {len(failed)} tuman yuklanmadi/yozilmadi "
+            f"({failed[:5]}...), ularning eski ma'lumoti saqlandi"
         )
     logger.info(
-        f"sync: viloyat {region_soato} ({len(soatos)} tuman, ketma-ket) "
-        f"-> {n} ta saqlandi"
+        f"sync: viloyat {region_soato} ({len(districts)} tuman, ketma-ket) "
+        f"-> jami {total_saved} ta saqlandi"
     )
-    return n
+    return total_saved
 
 
 async def sync_all(bot: Bot | None = None) -> None:
