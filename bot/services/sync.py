@@ -16,7 +16,6 @@ from bot.services import notifier
 from bot.services.abkm_api import ABKMAuthError, fetch_all
 
 _SYNC_INTERVAL = 6 * 3600  # 6 soat
-_DISTRICT_CONCURRENCY = 3  # bir vaqtda nechta tuman yuklansin
 
 # bir vaqtda faqat bitta to'liq sinxronlash ketsin (qo'lda + avtomatik)
 _sync_lock = asyncio.Lock()
@@ -28,10 +27,9 @@ def is_running() -> bool:
 
 
 async def sync_region(region_soato: int) -> int:
-    """Bitta viloyatni tumanlar kesimida parallel sinxronlaydi.
+    """Bitta viloyatni tumanlar kesimida KETMA-KET sinxronlaydi.
 
-    Viloyatning faol tumanlari (7 xonali SOATO) bir vaqtda yuklanadi; har
-    tuman ichida sahifalar ham parallel o'qiladi. Natija birlashtirilib,
+    Tumanlar bittadan (parallel emas) yuklanadi. Natija birlashtirilib,
     viloyat yozuvlari atomik qayta yoziladi. Saqlangan sonni qaytaradi.
 
     Agar biror tuman butunlay yuklanmasa, viloyat bazasi YANGILANMAYDI —
@@ -42,32 +40,20 @@ async def sync_region(region_soato: int) -> int:
 
     soatos = [d.soato for d in districts] or [region_soato]
 
-    sem = asyncio.Semaphore(_DISTRICT_CONCURRENCY)
-    auth_error = False
     failed: list[int] = []
+    chunks: list[list[dict]] = []
 
-    async def one(soato: int) -> list[dict]:
-        nonlocal auth_error
-        async with sem:
-            try:
-                return await fetch_all(soato)
-            except ABKMAuthError:
-                auth_error = True
-                raise
-            except Exception:  # noqa: BLE001
-                logger.exception(f"sync: tuman {soato} yuklashda xato")
-                failed.append(soato)
-                return []
-
-    chunks = await asyncio.gather(
-        *(one(s) for s in soatos), return_exceptions=True
-    )
-    if auth_error:
-        raise ABKMAuthError("API token eskirgan (tuman sinxronlashda).")
-
-    for s, chunk in zip(soatos, chunks):
-        if isinstance(chunk, BaseException):
-            failed.append(s)
+    # tumanma-tuman, ketma-ket
+    for soato in soatos:
+        try:
+            chunks.append(await fetch_all(soato))
+        except ABKMAuthError:
+            # token eskirgan — butun sinxronlashni to'xtatamiz
+            raise ABKMAuthError("API token eskirgan (tuman sinxronlashda).")
+        except Exception:  # noqa: BLE001
+            logger.exception(f"sync: tuman {soato} yuklashda xato")
+            failed.append(soato)
+            chunks.append([])
 
     # qisman muvaffaqiyatsizlik — eski ma'lumotni saqlaymiz, ustiga yozmaymiz
     if failed:
@@ -91,7 +77,8 @@ async def sync_region(region_soato: int) -> int:
             session, region_soato, list(uniq.values())
         )
     logger.info(
-        f"sync: viloyat {region_soato} ({len(soatos)} tuman) -> {n} ta saqlandi"
+        f"sync: viloyat {region_soato} ({len(soatos)} tuman, ketma-ket) "
+        f"-> {n} ta saqlandi"
     )
     return n
 

@@ -23,7 +23,6 @@ from bot.services.token_service import get_token
 _CACHE_TTL = 600  # 10 daqiqa
 _SYNC_PER_PAGE = 500  # sinxronlashda bitta sahifada nechta olish
 _MAX_PAGES = 1000  # himoya chegarasi
-_SYNC_CONCURRENCY = 4  # sinxronlashda bir vaqtda nechta sahifa so'rovi
 _RETRIES = 3  # tarmoq xatosida qayta urinish soni
 
 # kesh: (soato, published) -> (ts, total)
@@ -160,31 +159,20 @@ async def fetch_all(
 ) -> list[dict]:
     """SOATO (odatda viloyat) bo'yicha BARCHA vakansiyalarni yig'adi.
 
-    Avval 1-sahifani olib, umumiy sonni aniqlaydi; qolgan sahifalarni
-    parallel (cheklangan konkurensiya bilan) o'qiydi.
+    Sahifalar KETMA-KET o'qiladi (parallel emas).
     """
+    items: list[dict] = []
     async with aiohttp.ClientSession() as session:
         first, total = await _get_page(session, soato, 1, per_page, published_only)
         _count_cache[(soato, published_only)] = (time.time(), total)
         last_page = math.ceil(total / per_page) if total else 1
         last_page = min(last_page, _MAX_PAGES)
 
-        pages: dict[int, list[dict]] = {1: first}
-        if last_page > 1:
-            sem = asyncio.Semaphore(_SYNC_CONCURRENCY)
+        items.extend(first)
+        for page in range(2, last_page + 1):
+            chunk, _ = await _get_page(session, soato, page, per_page, published_only)
+            items.extend(chunk)
 
-            async def one(page: int) -> None:
-                async with sem:
-                    chunk, _ = await _get_page(
-                        session, soato, page, per_page, published_only
-                    )
-                pages[page] = chunk
-
-            await asyncio.gather(*(one(p) for p in range(2, last_page + 1)))
-
-    items: list[dict] = []
-    for page in range(1, last_page + 1):
-        items.extend(pages.get(page, []))
     logger.info(f"abkm: fetch_all soato={soato} -> {len(items)}/{total} ta")
     return items
 
