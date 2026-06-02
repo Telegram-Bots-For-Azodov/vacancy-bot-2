@@ -85,8 +85,9 @@ cp .env.example .env   # to'ldiring
 docker compose up -d --build
 ```
 
-SQLite baza `./data` papkasida saqlanadi (konteyner qayta qurilsa ham qoladi),
-loglar `./logs` da.
+SQLite baza host'ning **loyiha root papkasida** saqlanadi (`./vacancy.db`) —
+Docker konteyner ichida emas, shuning uchun redeploy/qayta qurishdan keyin ham
+qoladi va oson zaxiralanadi. Loglar `./logs` da.
 
 ## CI/CD — `master`ga push qilsangiz avtomatik deploy
 
