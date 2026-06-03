@@ -21,6 +21,9 @@ class AuthMiddleware(BaseMiddleware):
 
         async with SessionLocal() as session:
             data["session"] = session
+            # `user` HAR DOIM data'da bo'lsin — from_user yo'q updatelar (kanal
+            # postlari va h.k.) uchun handler "missing argument 'user'" bermasin.
+            data["user"] = None
             if tg_user is not None and not tg_user.is_bot:
                 user = await get_or_create_user(
                     session,

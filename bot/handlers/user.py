@@ -66,8 +66,9 @@ async def cmd_start(
         except (ValueError, IndexError):
             pass
 
+    name = message.from_user.full_name if message.from_user else "do'stim"
     await message.answer(
-        WELCOME.format(name=message.from_user.full_name),
+        WELCOME.format(name=name),
         reply_markup=_menu_for(user),
     )
 
