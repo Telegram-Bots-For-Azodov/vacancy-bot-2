@@ -20,6 +20,15 @@ async def _migrate(conn) -> None:
         )
         logger.info("Migration: users.is_active ustuni qo'shildi.")
 
+    # broadcast_jobs: navbat (queued) va retry o'tishi uchun yangi ustunlar
+    res = await conn.execute(text("PRAGMA table_info(broadcast_jobs)"))
+    bcols = {row[1] for row in res.fetchall()}
+    if bcols and "phase" not in bcols:
+        await conn.execute(
+            text("ALTER TABLE broadcast_jobs ADD COLUMN phase VARCHAR(8) DEFAULT 'main'")
+        )
+        logger.info("Migration: broadcast_jobs.phase ustuni qo'shildi.")
+
 
 async def init_db() -> None:
     async with engine.begin() as conn:

@@ -80,6 +80,16 @@ async def cb_stats(call: CallbackQuery, session: AsyncSession, user: User) -> No
         f"🔑 Token: <code>{token_short}</code>",
     ]
 
+    if broadcast.is_running():
+        p = broadcast.get_progress()
+        lines.append("\n📤 <b>Hozir reklama ketmoqda:</b>")
+        lines.append(
+            f"✅ {p['sent']}  ⛔️ {p['blocked']}  ⚠️ {p['failed']}  "
+            f"⏳ {p['remaining']}/{p['total']}"
+        )
+        if p.get("queued"):
+            lines.append(f"🗂 Navbatda: <b>{p['queued']}</b>")
+
     history = await crud.recent_daily_stats(session, limit=7)
     if history:
         lines.append("\n📅 <b>Oxirgi kunlar (DAU):</b>")
@@ -98,14 +108,18 @@ async def cb_ads_start(call: CallbackQuery, state: FSMContext, user: User) -> No
     if not _guard(user):
         await call.answer("Ruxsat yo'q.", show_alert=True)
         return
-    if broadcast.is_running():
-        await call.answer("⏳ Reklama allaqachon yuborilmoqda.", show_alert=True)
-        return
     await state.set_state(BroadcastStates.waiting_content)
+    note = ""
+    if broadcast.is_running():
+        note = (
+            "\n\n⏳ Hozir boshqa reklama ketmoqda — bu yangisi "
+            "<b>navbatga</b> qo'yiladi va o'z navbatida yuboriladi."
+        )
     await call.message.edit_text(
         "📣 <b>Reklama yuborish</b>\n\n"
         "Yubormoqchi bo'lgan xabarni (matn, rasm, video, ...) shu yerga "
-        "tashlang. Keyin tasdiqlaysiz.",
+        "tashlang. Keyin tasdiqlaysiz."
+        + note,
         reply_markup=ads_cancel(),
     )
     await call.answer()
@@ -142,23 +156,23 @@ async def cb_ads_go(
         await call.answer("Xabar topilmadi, qaytadan boshlang.", show_alert=True)
         return
 
-    await call.answer("📤 Yuborish boshlandi…")
-    await call.message.edit_text("📤 <b>Reklama yuborilmoqda…</b>")
-    try:
-        res = await broadcast.broadcast(call.bot, from_chat_id, message_id)
-    except Exception:  # noqa: BLE001
+    queued = broadcast.is_running()
+    await call.answer("🗂 Navbatga qo'yildi…" if queued else "📤 Yuborish boshlandi…")
+    if queued:
         await call.message.edit_text(
-            "⚠️ Reklama yuborishda xatolik.", reply_markup=admin_back()
+            "🗂 <b>Reklama navbatga qo'yildi.</b>\n\n"
+            "Oldingi reklama tugashi bilan avtomatik yuboriladi. "
+            "Holat real-time yangilanib boradi."
         )
-        return
-
-    await call.message.edit_text(
-        "✅ <b>Reklama yuborildi</b>\n\n"
-        f"📨 Jami: <b>{res['total']}</b>\n"
-        f"✅ Yetkazildi: <b>{res['sent']}</b>\n"
-        f"⚠️ Xato: <b>{res['failed']}</b>\n"
-        f"🗑 O'chirilgan (bloklagan): <b>{res['deleted']}</b>",
-        reply_markup=admin_back(),
+    else:
+        await call.message.edit_text(
+            "📤 <b>Reklama boshlandi.</b>\n\n"
+            "Holat quyida real-time yangilanib boradi. "
+            "Bot o'chib-yonsa ham jarayon avtomatik davom etadi."
+        )
+    # reklamani fonda boshlaymiz — jonli holatni broadcast o'zi yangilab boradi
+    await broadcast.start(
+        call.bot, from_chat_id, message_id, notify_chat_id=call.message.chat.id
     )
 
 

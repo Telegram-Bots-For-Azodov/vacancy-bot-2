@@ -64,6 +64,53 @@ class DailyStat(Base):
     total_users: Mapped[int] = mapped_column(Integer, default=0)
 
 
+class BroadcastJob(Base):
+    """Reklama yuborish vazifasi — restartdan keyin davom ettirish uchun DB'da.
+
+    status:  queued  — navbatda kutmoqda (oldidagi tugaguncha)
+             running — hozir yuborilmoqda
+             done    — yakunlandi
+             cancelled — admin bekor qildi
+             expired — manba xabar o'chgan yoki vazifa eskirgan
+    phase:   main    — barcha userlar bo'yicha asosiy o'tish (kursor)
+             retry   — yuborilmay qolganlarni qayta yuborish o'tishi
+    """
+
+    __tablename__ = "broadcast_jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    from_chat_id: Mapped[int] = mapped_column(BigInteger)  # manba chat (admin)
+    message_id: Mapped[int] = mapped_column(BigInteger)  # nusxalanadigan xabar
+    notify_chat_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), default="queued")
+    phase: Mapped[str] = mapped_column(String(8), default="main")  # main/retry
+    total: Mapped[int] = mapped_column(Integer, default=0)
+    sent: Mapped[int] = mapped_column(Integer, default=0)
+    failed: Mapped[int] = mapped_column(Integer, default=0)
+    blocked: Mapped[int] = mapped_column(Integer, default=0)
+    cursor: Mapped[int] = mapped_column(BigInteger, default=0)  # oxirgi ishlangan user id
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class BroadcastFailure(Base):
+    """Reklama yuborilmay qolgan foydalanuvchilar — qayta yuborish (retry) uchun.
+
+    Asosiy o'tishda yuborib bo'lmagan (tarmoq/vaqtinchalik xato) user shu yerga
+    yoziladi. Retry o'tishida muvaffaqiyatli yuborilsa — o'chiriladi. Restartdan
+    keyin ham saqlanib qoladi, shuning uchun qayta yuborish uzilmaydi.
+    """
+
+    __tablename__ = "broadcast_failures"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    job_id: Mapped[int] = mapped_column(
+        ForeignKey("broadcast_jobs.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=1)
+
+
 class Region(Base):
     """Viloyat — SOATO kodi (masalan 1733 = Xorazm)."""
 

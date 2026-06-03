@@ -17,6 +17,7 @@ from bot.database.db import close_db, init_db
 from bot.database.seed import seed_soato
 from bot.handlers import setup_routers
 from bot.middlewares.auth import AuthMiddleware
+from bot.services import broadcast
 from bot.services.daily import daily_loop
 from bot.services.sync import sync_loop
 from bot.services.token_service import load_token
@@ -73,6 +74,12 @@ async def main() -> None:
         await set_commands(bot)
     except Exception as e:  # noqa: BLE001
         logger.warning(f"set_commands o'tkazib yuborildi (tarmoq?): {e}")
+
+    # uzilib qolgan reklama bo'lsa — avtomatik davom ettiramiz
+    try:
+        await broadcast.resume_pending(bot)
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"broadcast resume xato: {e}")
 
     # fon: vakansiyalarni sinxronlash (darhol bir marta ishga tushadi)
     sync_task = asyncio.create_task(sync_loop(bot))

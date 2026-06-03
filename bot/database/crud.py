@@ -9,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bot.config import settings
 from bot.database.models import (
     AppSetting,
+    BroadcastFailure,
+    BroadcastJob,
     DailyStat,
     District,
     Region,
@@ -107,6 +109,22 @@ async def all_user_ids(session: AsyncSession) -> list[int]:
     return [int(x) for x in res.scalars().all()]
 
 
+async def user_ids_after(
+    session: AsyncSession, after_id: int, limit: int
+) -> list[int]:
+    """id > after_id bo'lgan (bloklanmagan) foydalanuvchilar, id bo'yicha tartibda.
+
+    Reklamani uzilishdan keyin kursordan davom ettirish uchun.
+    """
+    res = await session.execute(
+        select(User.id)
+        .where(User.is_banned.is_(False), User.id > after_id)
+        .order_by(User.id)
+        .limit(limit)
+    )
+    return [int(x) for x in res.scalars().all()]
+
+
 async def delete_user(session: AsyncSession, tg_id: int) -> None:
     await session.execute(delete(User).where(User.id == tg_id))
     await session.commit()
@@ -118,6 +136,159 @@ async def delete_users(session: AsyncSession, tg_ids: list[int]) -> int:
     await session.execute(delete(User).where(User.id.in_(tg_ids)))
     await session.commit()
     return len(tg_ids)
+
+
+# ---------------------------------------------------------------- broadcast job
+async def create_broadcast_job(
+    session: AsyncSession,
+    from_chat_id: int,
+    message_id: int,
+    notify_chat_id: int | None,
+    total: int,
+) -> BroadcastJob:
+    """Yangi reklama vazifasini yaratadi.
+
+    Agar hozir boshqa vazifa ketayotgan/navbatda bo'lsa — bu yangisi `queued`
+    bo'ladi va o'z navbatida ishga tushadi. Aks holda darhol `running`.
+    """
+    res = await session.execute(
+        select(func.count(BroadcastJob.id)).where(
+            BroadcastJob.status.in_(["running", "queued"])
+        )
+    )
+    busy = int(res.scalar() or 0) > 0
+    job = BroadcastJob(
+        from_chat_id=from_chat_id,
+        message_id=message_id,
+        notify_chat_id=notify_chat_id,
+        status="queued" if busy else "running",
+        total=total,
+    )
+    session.add(job)
+    await session.commit()
+    return job
+
+
+async def get_active_broadcast_job(session: AsyncSession) -> BroadcastJob | None:
+    """Hozir ishlayotgan (running) vazifa — restartda davom ettirish uchun."""
+    res = await session.execute(
+        select(BroadcastJob)
+        .where(BroadcastJob.status == "running")
+        .order_by(BroadcastJob.id)
+        .limit(1)
+    )
+    return res.scalar_one_or_none()
+
+
+async def next_queued_job(session: AsyncSession) -> BroadcastJob | None:
+    """Navbatdagi eng eski vazifani `running` qilib qaytaradi (FIFO)."""
+    res = await session.execute(
+        select(BroadcastJob)
+        .where(BroadcastJob.status == "queued")
+        .order_by(BroadcastJob.id)
+        .limit(1)
+    )
+    job = res.scalar_one_or_none()
+    if job is not None:
+        job.status = "running"
+        job.updated_at = utcnow()
+        await session.commit()
+    return job
+
+
+async def count_queued_jobs(session: AsyncSession) -> int:
+    res = await session.execute(
+        select(func.count(BroadcastJob.id)).where(BroadcastJob.status == "queued")
+    )
+    return int(res.scalar() or 0)
+
+
+async def save_broadcast_progress(
+    session: AsyncSession,
+    job_id: int,
+    cursor: int,
+    sent: int,
+    failed: int,
+    blocked: int,
+    phase: str | None = None,
+) -> None:
+    values = dict(
+        cursor=cursor, sent=sent, failed=failed, blocked=blocked,
+        updated_at=utcnow(),
+    )
+    if phase is not None:
+        values["phase"] = phase
+    await session.execute(
+        update(BroadcastJob).where(BroadcastJob.id == job_id).values(**values)
+    )
+    await session.commit()
+
+
+async def finish_broadcast_job(
+    session: AsyncSession, job_id: int, status: str = "done"
+) -> None:
+    await session.execute(
+        update(BroadcastJob)
+        .where(BroadcastJob.id == job_id)
+        .values(status=status, updated_at=utcnow())
+    )
+    await session.commit()
+
+
+# ------------------------------------------------------ broadcast failures (retry)
+async def record_broadcast_failures(
+    session: AsyncSession, job_id: int, user_ids: list[int]
+) -> None:
+    """Yuborilmay qolgan userlarni retry uchun yozadi (mavjudini takrorlamaydi)."""
+    uniq = list(dict.fromkeys(user_ids))
+    if not uniq:
+        return
+    res = await session.execute(
+        select(BroadcastFailure.user_id).where(
+            BroadcastFailure.job_id == job_id,
+            BroadcastFailure.user_id.in_(uniq),
+        )
+    )
+    existing = {int(x) for x in res.scalars().all()}
+    for uid in uniq:
+        if uid not in existing:
+            session.add(BroadcastFailure(job_id=job_id, user_id=uid))
+    await session.commit()
+
+
+async def failed_user_ids(session: AsyncSession, job_id: int) -> list[int]:
+    res = await session.execute(
+        select(BroadcastFailure.user_id)
+        .where(BroadcastFailure.job_id == job_id)
+        .order_by(BroadcastFailure.user_id)
+    )
+    return [int(x) for x in res.scalars().all()]
+
+
+async def clear_broadcast_failure(
+    session: AsyncSession, job_id: int, user_id: int
+) -> None:
+    await session.execute(
+        delete(BroadcastFailure).where(
+            BroadcastFailure.job_id == job_id,
+            BroadcastFailure.user_id == user_id,
+        )
+    )
+    await session.commit()
+
+
+async def bump_failure_attempt(
+    session: AsyncSession, job_id: int, user_id: int
+) -> None:
+    await session.execute(
+        update(BroadcastFailure)
+        .where(
+            BroadcastFailure.job_id == job_id,
+            BroadcastFailure.user_id == user_id,
+        )
+        .values(attempts=BroadcastFailure.attempts + 1)
+    )
+    await session.commit()
 
 
 # ---------------------------------------------------------------- admin mgmt
