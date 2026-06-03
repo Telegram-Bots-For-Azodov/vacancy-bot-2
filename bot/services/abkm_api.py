@@ -21,9 +21,10 @@ from bot.config import settings
 from bot.services.token_service import get_token
 
 _CACHE_TTL = 600  # 10 daqiqa
-_SYNC_PER_PAGE = 500  # sinxronlashda bitta sahifada nechta olish
+_SYNC_PER_PAGE = 200  # sinxronlashda bitta sahifada nechta olish (sekin tarmoq uchun kichik)
 _MAX_PAGES = 1000  # himoya chegarasi
-_RETRIES = 3  # tarmoq xatosida qayta urinish soni
+_RETRIES = 5  # tarmoq xatosida qayta urinish soni
+_REQUEST_TIMEOUT = 120  # bitta so'rov uchun maksimal vaqt (s)
 
 # kesh: (soato, published) -> (ts, total)
 _count_cache: dict[tuple, tuple[float, int]] = {}
@@ -109,7 +110,7 @@ async def _get_page_once(
         params=params,
         headers=_headers(),
         cookies=cookies,
-        timeout=aiohttp.ClientTimeout(total=60),
+        timeout=aiohttp.ClientTimeout(total=_REQUEST_TIMEOUT, connect=30),
     ) as resp:
         if resp.status == 401:
             _flag_auth_error()
@@ -143,12 +144,14 @@ async def _get_page(
             raise
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             last_exc = e
+            desc = str(e) or type(e).__name__  # TimeoutError str bo'sh bo'ladi
+            logger.warning(
+                f"abkm: soato={soato} page={page} urinish {attempt}/{_RETRIES} xato: {desc}"
+            )
             if attempt < _RETRIES:
-                await asyncio.sleep(attempt * 2)  # 2s, 4s
-                logger.warning(
-                    f"abkm: soato={soato} page={page} urinish {attempt} xato: {e}"
-                )
-    raise ABKMError(f"API so'rovi {_RETRIES} marta muvaffaqiyatsiz: {last_exc}")
+                await asyncio.sleep(attempt * 3)  # 3s, 6s, 9s, 12s
+    desc = str(last_exc) or type(last_exc).__name__
+    raise ABKMError(f"API so'rovi {_RETRIES} marta muvaffaqiyatsiz: {desc}")
 
 
 # ---------------------------------------------------------------- fetch all
