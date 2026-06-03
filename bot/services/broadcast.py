@@ -183,7 +183,14 @@ async def _status_channel(bot: Bot, init_text: str):
         except Exception:  # noqa: BLE001
             pass
 
+    last_text = {"v": init_text}
+
     async def update(text: str) -> None:
+        # matn o'zgarmagan bo'lsa — tahrir qilmaymiz ("message is not modified"
+        # Bad Request'ini va keraksiz API chaqiruvlarini oldini olamiz)
+        if text == last_text["v"]:
+            return
+        last_text["v"] = text
         for cid, mid in status_msgs:
             try:
                 await bot.edit_message_text(text, chat_id=cid, message_id=mid)

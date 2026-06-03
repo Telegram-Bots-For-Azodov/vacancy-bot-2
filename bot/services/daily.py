@@ -28,8 +28,10 @@ async def _run_once() -> None:
     """Tugagan kun statistikasi yoziladi va bayroqlar tozalanadi."""
     tz = get_tz()
     now_local = datetime.now(tz)
-    # endigina tugagan kun = kechagi sana (00:00 da ishga tushadi)
-    ended = now_local - timedelta(seconds=1)
+    # Loop yarim tundan ~1s keyin uyg'onadi. Endigina TUGAGAN kun = kechagi sana.
+    # 1 soniya ayirsak hali ham yangi kun chiqadi (00:00:00) — shuning uchun
+    # bemalol kechaga tushish uchun 1 daqiqa ayiramiz.
+    ended = now_local - timedelta(minutes=1)
     day = ended.strftime("%Y-%m-%d")
     # shu kun boshining UTC vaqti (yangi foydalanuvchilarni sanash uchun)
     since_utc = local_day_start_utc(ended)
