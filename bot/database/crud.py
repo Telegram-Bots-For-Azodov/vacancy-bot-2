@@ -549,6 +549,17 @@ def _scope(soato: int, region_soato: int):
     return Vacancy.soato == soato
 
 
+def _parse_salary(value) -> int:
+    """position_salary ("1300000.00" kabi) -> butun son so'mda. Xato -> 0."""
+    if value is None:
+        return 0
+    try:
+        num = float(str(value).strip())
+    except (ValueError, TypeError):
+        return 0
+    return int(num) if num > 0 else 0
+
+
 async def replace_region_vacancies(
     session: AsyncSession, region_soato: int, vacancies: list[dict]
 ) -> int:
@@ -575,6 +586,7 @@ async def replace_region_vacancies(
                 company_name=(v.get("company_name") or "")[:256],
                 position_name=(v.get("position_name") or "")[:256],
                 order_key=str(v.get("created_at") or ""),
+                salary=_parse_salary(v.get("position_salary")),
                 raw=json.dumps(v, ensure_ascii=False),
             )
         )
@@ -618,6 +630,7 @@ async def replace_district_vacancies(
                 company_name=(v.get("company_name") or "")[:256],
                 position_name=(v.get("position_name") or "")[:256],
                 order_key=str(v.get("created_at") or ""),
+                salary=_parse_salary(v.get("position_salary")),
                 raw=json.dumps(v, ensure_ascii=False),
             )
         )
@@ -682,6 +695,41 @@ async def list_company_vacancies(
             out.append(json.loads(raw))
         except (TypeError, ValueError):
             continue
+    return out
+
+
+async def top_salary_vacancies(
+    session: AsyncSession, limit: int = 10
+) -> list[dict]:
+    """Eng yuqori oylik maoshli vakansiyalar (maosh kamayish tartibida).
+
+    Faqat maoshi ko'rsatilgan (salary > 0) yozuvlar. Har korxonadan ko'p
+    takror bo'lmasligi uchun bir xil (tin, lavozim, maosh) bittasi qoldiriladi.
+    """
+    res = await session.execute(
+        select(Vacancy.raw)
+        .where(Vacancy.salary > 0)
+        .order_by(Vacancy.salary.desc(), Vacancy.id.desc())
+        .limit(limit * 4)  # takrorlarni filtrlash uchun biroz ko'proq olamiz
+    )
+    out: list[dict] = []
+    seen: set[tuple] = set()
+    for (raw,) in res.all():
+        try:
+            v = json.loads(raw)
+        except (TypeError, ValueError):
+            continue
+        key = (
+            str(v.get("company_tin") or ""),
+            str(v.get("position_name") or ""),
+            str(v.get("position_salary") or ""),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(v)
+        if len(out) >= limit:
+            break
     return out
 
 

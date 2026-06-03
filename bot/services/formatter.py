@@ -179,6 +179,16 @@ def format_vacancy(v: dict, index: int | None = None, total: int | None = None) 
     return text
 
 
+def top_button_label(v: dict, rank: int | None = None) -> str:
+    """TOP ro'yxati tugmasi uchun qisqa yorliq: maosh + lavozim (tugma matni, HTML emas)."""
+    salary = _money(v.get("position_salary"))  # "3 500 000 so'm"
+    title = _translit(v.get("position_name") or v.get("position_name_ru") or "Lavozim").strip()
+    if len(title) > 28:
+        title = title[:27].rstrip() + "…"
+    prefix = f"{rank}. " if rank is not None else ""
+    return f"{prefix}💰 {salary} — {title}"
+
+
 def format_vacancy_public(v: dict) -> str:
     """Ulashish uchun qisqartirilgan kartochka — telefon va ish sharti yashirin."""
     info = v.get("additional_info") or {}

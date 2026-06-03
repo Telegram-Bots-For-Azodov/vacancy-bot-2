@@ -138,6 +138,7 @@ class Vacancy(Base):
     company_name: Mapped[str] = mapped_column(String(256), default="")
     position_name: Mapped[str] = mapped_column(String(256), default="")
     order_key: Mapped[str] = mapped_column(String(40), default="")  # saralash uchun (created_at)
+    salary: Mapped[int] = mapped_column(Integer, default=0, index=True)  # oylik maosh (so'm)
     raw: Mapped[str] = mapped_column(Text)
     synced_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 

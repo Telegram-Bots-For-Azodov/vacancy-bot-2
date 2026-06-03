@@ -29,6 +29,27 @@ async def _migrate(conn) -> None:
         )
         logger.info("Migration: broadcast_jobs.phase ustuni qo'shildi.")
 
+    # vacancies: maosh bo'yicha saralash uchun salary ustuni + backfill
+    res = await conn.execute(text("PRAGMA table_info(vacancies)"))
+    vcols = {row[1] for row in res.fetchall()}
+    if vcols and "salary" not in vcols:
+        await conn.execute(
+            text("ALTER TABLE vacancies ADD COLUMN salary INTEGER DEFAULT 0")
+        )
+        # mavjud yozuvlarda raw JSON dagi position_salary'dan to'ldiramiz
+        await conn.execute(
+            text(
+                "UPDATE vacancies SET salary = CAST(CAST("
+                "json_extract(raw, '$.position_salary') AS REAL) AS INTEGER) "
+                "WHERE json_valid(raw) "
+                "AND json_extract(raw, '$.position_salary') IS NOT NULL"
+            )
+        )
+        await conn.execute(
+            text("CREATE INDEX IF NOT EXISTS ix_vacancies_salary ON vacancies (salary)")
+        )
+        logger.info("Migration: vacancies.salary ustuni qo'shildi va to'ldirildi.")
+
 
 async def init_db() -> None:
     async with engine.begin() as conn:

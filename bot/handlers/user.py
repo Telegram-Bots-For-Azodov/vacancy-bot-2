@@ -16,9 +16,11 @@ from bot.keyboards.user_kb import (
     org_vacancy_nav_kb,
     orgs_kb,
     regions_kb,
+    top_list_kb,
+    top_vacancy_kb,
 )
 from bot.services import currency
-from bot.services.formatter import format_vacancy
+from bot.services.formatter import format_vacancy, top_button_label
 from bot.utils.access import is_admin, is_superadmin
 
 
@@ -102,6 +104,49 @@ async def cb_menu(call: CallbackQuery, user: User) -> None:
 async def cb_about(call: CallbackQuery) -> None:
     await call.message.edit_text(ABOUT_TEXT, reply_markup=back_menu_kb())
     await call.answer()
+
+
+# ---------------------------------------------------------------- top salaries
+TOP_LIMIT = 10
+
+
+@router.callback_query(F.data == "top")
+async def cb_top(call: CallbackQuery, session: AsyncSession) -> None:
+    """Oylik maosh bo'yicha eng yuqori 10 ta vakansiyani tugma shaklida ko'rsatadi."""
+    await call.answer()
+    items = await crud.top_salary_vacancies(session, TOP_LIMIT)
+    if not items:
+        await call.message.edit_text(
+            "😕 Hozircha maoshi ko'rsatilgan vakansiyalar topilmadi.",
+            reply_markup=back_menu_kb(),
+        )
+        return
+    labels = [top_button_label(v, rank=i + 1) for i, v in enumerate(items)]
+    await call.message.edit_text(
+        "💰 <b>Eng yuqori oylik maoshli TOP 10 ish o'rni</b>\n\n"
+        "Batafsil ko'rish uchun tegishli tugmani bosing 👇",
+        reply_markup=top_list_kb(labels),
+    )
+
+
+@router.callback_query(F.data.startswith("topv:"))
+async def cb_top_vacancy(call: CallbackQuery, session: AsyncSession) -> None:
+    await call.answer()
+    index = int(call.data.split(":")[1])
+    items = await crud.top_salary_vacancies(session, TOP_LIMIT)
+    if not items:
+        await call.message.edit_text(
+            "😕 Vakansiyalar yangilangan, ro'yxatni qaytadan oching.",
+            reply_markup=back_menu_kb(),
+        )
+        return
+    total = len(items)
+    index = index % total
+    text = format_vacancy(items[index], index, total)
+    try:
+        await call.message.edit_text(text, reply_markup=top_vacancy_kb(index, total))
+    except Exception:  # noqa: BLE001
+        pass
 
 
 @router.callback_query(F.data == "rates")

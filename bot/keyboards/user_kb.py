@@ -25,6 +25,7 @@ def _fmt_count(total: int) -> str:
 def main_menu(is_admin: bool = False, is_superadmin: bool = False) -> InlineKeyboardMarkup:
     rows = [
         [InlineKeyboardButton(text="🔍 Bo'sh ish o'rinlari", callback_data="browse")],
+        [InlineKeyboardButton(text="💰 Eng yuqori maoshli (TOP 10)", callback_data="top")],
         [InlineKeyboardButton(text="💵 Valyuta kurslari", callback_data="rates")],
         [InlineKeyboardButton(text="ℹ️ Bot haqida", callback_data="about")],
     ]
@@ -45,6 +46,39 @@ def back_menu_kb() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="🏠 Bosh menyu", callback_data="menu")]
         ]
     )
+
+
+def top_list_kb(labels: list[str]) -> InlineKeyboardMarkup:
+    """TOP-10 maoshli vakansiyalar — har biri tugma (topv:{index})."""
+    rows: list[list[InlineKeyboardButton]] = []
+    for i, label in enumerate(labels):
+        rows.append(
+            [InlineKeyboardButton(text=label, callback_data=f"topv:{i}")]
+        )
+    rows.append([InlineKeyboardButton(text="🏠 Bosh menyu", callback_data="menu")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def top_vacancy_kb(index: int, total: int) -> InlineKeyboardMarkup:
+    """Bitta TOP vakansiya kartochkasi — oldingi/keyingi + ro'yxatga qaytish."""
+    rows: list[list[InlineKeyboardButton]] = []
+    if total > 1:
+        prev_idx = (index - 1) % total
+        next_idx = (index + 1) % total
+        rows.append(
+            [
+                InlineKeyboardButton(text="⬅️ Oldingi", callback_data=f"topv:{prev_idx}"),
+                InlineKeyboardButton(text=f"{index + 1}/{total}", callback_data="noop"),
+                InlineKeyboardButton(text="Keyingi ➡️", callback_data=f"topv:{next_idx}"),
+            ]
+        )
+    rows.append(
+        [
+            InlineKeyboardButton(text="⬅️ TOP ro'yxat", callback_data="top"),
+            InlineKeyboardButton(text="🏠 Bosh menyu", callback_data="menu"),
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def regions_kb(regions: list[Region]) -> InlineKeyboardMarkup:
