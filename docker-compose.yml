@@ -3,11 +3,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      network: host
     image: vacancy-bot:latest
     container_name: vacancy-bot
     restart: always
-    network_mode: host
     env_file: .env
     environment:
       # Baza Docker ichida emas — host'ning loyiha root papkasida (./vacancy.db)
@@ -15,3 +13,11 @@ services:
     volumes:
       - .:/data
       - ./logs:/app/logs
+    expose: [ "8080" ]
+    ports: [ "127.0.0.1:8080:8080" ]
+    networks: [ botnet ]
+
+networks:
+  botnet:
+    external: true
+    name: botnet

@@ -30,7 +30,7 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
           source: "bot,requirements.txt,Dockerfile,docker-compose.yml,.dockerignore"
-          target: "~/vacancy-bot"
+          target: "/opt/vacancy-bot"
           overwrite: true
 
       - name: Serverda deploy (Docker)
@@ -42,17 +42,14 @@ jobs:
           port: ${{ secrets.SSH_PORT || 22 }}
           script: |
             set -e
-            cd ~/vacancy-bot
-            cat > .env <<'EOF'
-            BOT_TOKEN=${{ secrets.BOT_TOKEN }}
-            TELEGRAM_PROXY=${{ secrets.TELEGRAM_PROXY }}
-            SUPERADMIN_IDS=${{ secrets.SUPERADMIN_IDS }}
-            ADMIN_IDS=${{ secrets.ADMIN_IDS }}
-            ABKM_TOKEN=${{ secrets.ABKM_TOKEN }}
-            DEFAULT_YEAR=${{ secrets.DEFAULT_YEAR }}
-            DEFAULT_MONTH=${{ secrets.DEFAULT_MONTH }}
-            LOG_LEVEL=INFO
-            EOF
+            cd /opt/vacancy-bot
+            # .env serverda doimiy turadi (app sirlari GitHub'da emas). Faqat mavjudligini tekshiramiz.
+            if [ ! -f .env ]; then
+              echo "XATO: /opt/vacancy-bot/.env topilmadi. Avval serverda .env ni bir marta yarating." >&2
+              exit 1
+            fi
+            # botnet tarmog'i mavjudligini ta'minlash (odatda telegram-bot-api stack yaratadi)
+            docker network inspect botnet >/dev/null 2>&1 || docker network create botnet
             docker compose build --no-cache
-            docker compose up -d
+            docker compose up -d --force-recreate
             docker image prune -f
